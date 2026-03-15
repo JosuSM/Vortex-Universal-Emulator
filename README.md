@@ -142,23 +142,12 @@ app/src/main/java/com/vortex/emulator/
 - Keep the keystore file under `keystore/`.
 - Both files are ignored by Git and stay local to your machine.
 
-### CI Or Play Store Uploads
+### CI Release Uploads
 
 - Gradle now prefers these environment variables when they are present: `VORTEX_SIGNING_STORE_BASE64`, `VORTEX_SIGNING_STORE_FILE`, `VORTEX_SIGNING_STORE_PASSWORD`, `VORTEX_SIGNING_KEY_ALIAS`, `VORTEX_SIGNING_KEY_PASSWORD`.
 - Use `VORTEX_SIGNING_STORE_BASE64` in CI when you want to inject the keystore directly from a secret.
 - Use `VORTEX_SIGNING_STORE_FILE` when your runner mounts the keystore as a file.
 - The included workflow at `.github/workflows/android-release.yml` builds a signed release APK and uploads it as an artifact.
-- The included workflow at `.github/workflows/android-play-release.yml` supports both signed uploads and track promotion in Google Play.
-- For Play uploads, add `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` and optionally `GOOGLE_PLAY_TRACK` as repository secrets.
-
-### Production-Safe Play Flow
-
-- `android-play-release.yml` is manual only and does not publish automatically on push.
-- The workflow has two actions: `upload` builds a signed `.aab` and uploads it to a selected track, and `promote` moves an existing release from one track to another.
-- The job environment is `play-<track>`. Configure required reviewers in GitHub environments such as `play-production` to add manual approval before sensitive releases.
-- Exact recommended GitHub environment rules are documented in `docs/github-environments.md`.
-- Default changelog metadata lives in `distribution/whatsnew/en-US/default.txt`, and the workflow can override it with the `release_notes` input.
-- Recommended flow: upload to `internal`, validate there, then run the workflow again with `action=promote` and `source_track=internal` to move the same release to `beta` or `production`.
 
 ```bash
 export VORTEX_SIGNING_STORE_BASE64="$(base64 -w0 keystore/release-signing.jks)"
