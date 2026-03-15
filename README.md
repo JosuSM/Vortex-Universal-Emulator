@@ -1,160 +1,156 @@
-# Vortex Emulator
+<p align="center">
+  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp" width="120" alt="Vortex Logo"/>
+</p>
+
+<h1 align="center">Vortex Emulator</h1>
 
 <p align="center">
-  <strong>Performance. Compatibility. Style.</strong>
+  <strong>Play retro. Feel modern.</strong><br/>
+  The open-source Android emulator that brings 15+ classic platforms to your pocket — beautifully.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.1_Andromeda-00E5FF?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android"/>
+  <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
+  <img src="https://img.shields.io/badge/Kotlin-2.1-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin"/>
 </p>
 
 ---
 
-## About
+## Why Vortex?
 
-**Vortex** is a next-generation Android emulator built from the ground up for **performance**, **multi-chipset compatibility**, and an exceptional **gaming UX**. It features a stunning Material Design 3 interface with a dark, gamer-focused aesthetic.
+Most emulators feel like developer tools. Vortex feels like a **gaming app** — designed for real players who care about both performance and aesthetics.
+
+- **One app, 15+ platforms** — NES to PSP, Arcade to Saturn
+- **Smart hardware detection** — Automatically tunes settings for your chipset
+- **Gorgeous dark UI** — Material 3 with neon cyan & purple accents
+- **Save anywhere** — 10 quick-save slots, export/import, rewind time
+- **Play together** — Local 2-player and LAN netplay built in
+
+---
+
+## Supported Platforms
+
+| Platform | Core | Status |
+|----------|------|--------|
+| NES | FCEUmm / Mesen / Nestopia | Excellent |
+| SNES | Snes9x | Excellent |
+| Nintendo 64 | Mupen64Plus-Next / ParaLLEl | Great |
+| Game Boy Advance | mGBA / VBA-M | Excellent |
+| Game Boy Color | mGBA / SameBoy | Excellent |
+| Nintendo DS | melonDS / DeSmuME | Great |
+| Sega Genesis | Genesis Plus GX / PicoDrive | Excellent |
+| PlayStation | SwanStation / Beetle PSX HW | Excellent |
+| PSP | PPSSPP | Excellent |
+| Dreamcast | Flycast | Great |
+| Saturn | Beetle Saturn / Yabause | Good |
+| Arcade | FinalBurn Neo / MAME 2003+ | Excellent |
+
+> 21 cores total — each downloaded on-demand and cached locally.
+
+---
 
 ## Features
 
-### Multi-Platform Emulation
-| Platform | Core | Quality |
-|----------|------|---------|
-| NES | FCEUmm | Excellent |
-| SNES | Snes9x / bsnes | Excellent |
-| Nintendo 64 | Mupen64Plus-Next | Great |
-| Game Boy Advance | mGBA | Excellent |
-| Game Boy Color | mGBA | Excellent |
-| Nintendo DS | melonDS | Great |
-| Sega Genesis | Genesis Plus GX | Excellent |
-| PlayStation | SwanStation | Excellent |
-| PSP | PPSSPP | Excellent |
-| Dreamcast | Flycast | Great |
-| Saturn | Beetle Saturn | Good |
-| Arcade | FinalBurn Neo | Excellent |
-| GameCube | Dolphin | Good |
-| Wii | Dolphin | Good |
-
-### Smart Chipset Detection
-- Automatic detection of Qualcomm Snapdragon, MediaTek Dimensity, Samsung Exynos, Google Tensor, HiSilicon Kirin
-- Tier classification: **Flagship**, **High End**, **Mid Range**, **Entry Level**, **Low End**
-- Auto-recommended settings based on hardware capabilities
-
-### GPU Driver Management
-- **Turnip** (Mesa Vulkan) for Adreno GPUs
-- **Freedreno** (Mesa OpenGL) for Adreno GPUs
-- **PanVK** (Mesa Vulkan) for Mali GPUs
-- **Panfrost** (Mesa OpenGL) for Mali GPUs
-- Samsung Game Driver for Xclipse (RDNA2) GPUs
-- One-tap driver switching
-
-### Performance
-- Vulkan & OpenGL ES 3.2 rendering
-- Frame pacing for smooth 60fps gameplay
+### Emulation
+- Native C libretro frontend with JNI bridge for near-zero overhead
+- Vulkan & OpenGL ES rendering with resolution upscaling
+- Frame pacing for smooth 60 FPS gameplay
 - Real-time FPS counter and performance monitoring
-- Resolution upscaling up to 5x native
-- Shader support for visual enhancements
+- Core switching per platform without restarting
 
-### Gamer UX
-- Material Design 3 with dark neon aesthetic (Cyan + Purple accents)
-- Beautiful game library with platform badges and cover art
-- On-screen touch controls: D-Pad, analog stick, action buttons, shoulders
-- Quick menu during gameplay (save/load states, rewind, fast-forward, cheats)
-- Haptic feedback on controls
-- Landscape-optimized layout
+### Controls
+- **8-direction D-Pad** with diagonal support and visual feedback
+- **ABXY buttons** with radial gradients and press animations
+- Analog stick, shoulder buttons (L/R), Start/Select
+- Haptic feedback on all controls
+- Landscape & portrait optimized layouts
+- Hide/show controls on the fly
+
+### Save States
+- 10 quick-save slots with one-tap save/load
+- Export & import save files via Android SAF
+- Rewind time during gameplay
+- Fast forward for grinding
+
+### Multiplayer
+- Local 2-player mode with on-screen player toggle
+- UDP LAN netplay — host, join, or browse lobbies
+- Platform-filtered game search
+
+### Smart Hardware
+- Auto-detects Snapdragon, Dimensity, Exynos, Tensor, Kirin
+- Classifies your device: Flagship → Low End
+- Recommends optimal settings per game
+- GPU driver management (Turnip, Freedreno, PanVK, Panfrost)
+
+### Design
+- Material Design 3 dark theme with neon accents
+- Scrollable Quick Menu that works in landscape
+- Game library with platform badges and cover art
+- Clean, focused UI — no clutter
+
+---
+
+## Screenshots
+
+> Coming soon — run the app and see for yourself!
+
+---
+
+## Getting Started
+
+### Requirements
+- Android 8.0+ (API 26)
+- ~50 MB storage + space for cores and ROMs
+
+### Install
+
+Download the latest APK from [Releases](../../releases) or build from source:
+
+```bash
+git clone https://github.com/JosuSM/Vortex-Universal-Emulator.git
+cd Vortex-Universal-Emulator
+./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+### Build Requirements
+- Android Studio Ladybug (2024.2+)
+- JDK 17+
+- Android SDK 35, NDK with CMake 3.22.1
+- Kotlin 2.1+
+
+---
 
 ## Tech Stack
 
 | Component | Technology |
 |-----------|------------|
-| Language | Kotlin |
+| Language | Kotlin + C (native frontend) |
 | UI | Jetpack Compose + Material 3 |
 | DI | Hilt |
 | Database | Room |
 | Navigation | Navigation Compose |
 | Image Loading | Coil |
 | Settings | DataStore Preferences |
-| Min SDK | 26 (Android 8.0) |
-| Target SDK | 35 |
+| Emulation | libretro API via JNI |
 
-## Project Structure
+---
 
-```
-app/src/main/java/com/vortex/emulator/
-├── VortexApp.kt              # Application class
-├── MainActivity.kt            # Single activity
-├── core/                      # Emulation engine
-│   ├── Platform.kt            # Supported platforms enum
-│   ├── CoreInfo.kt            # Core metadata
-│   ├── EmulationCore.kt       # Core interface
-│   └── CoreManager.kt         # Core lifecycle management
-├── gpu/                       # GPU & hardware
-│   ├── ChipsetDetector.kt     # Hardware detection & classification
-│   └── DriverManager.kt       # GPU driver management
-├── game/                      # Game library
-│   ├── Game.kt                # Game entity (Room)
-│   ├── GameDao.kt             # Database queries
-│   ├── GameDatabase.kt        # Room database
-│   └── GameScanner.kt         # ROM scanner
-├── performance/               # Performance tools
-│   ├── PerformanceMonitor.kt  # FPS & stats tracking
-│   └── FramePacer.kt          # Frame timing
-├── service/                   # Background services
-│   └── EmulationService.kt    # Foreground service
-├── di/                        # Dependency injection
-│   └── AppModule.kt           # Hilt modules
-└── ui/                        # User interface
-    ├── theme/                 # Material 3 theme
-    │   ├── Color.kt
-    │   ├── Theme.kt
-    │   └── Type.kt
-    ├── navigation/            # App navigation
-    │   ├── Screen.kt
-    │   └── VortexNavigation.kt
-    ├── components/            # Reusable components
-    │   ├── GameCard.kt
-    │   └── VortexHeader.kt
-    ├── screens/               # App screens
-    │   ├── HomeScreen.kt
-    │   ├── LibraryScreen.kt
-    │   ├── CoresScreen.kt
-    │   ├── PerformanceScreen.kt
-    │   ├── SettingsScreen.kt
-    │   └── EmulationScreen.kt
-    └── viewmodel/             # ViewModels
-        ├── HomeViewModel.kt
-        ├── LibraryViewModel.kt
-        ├── CoresViewModel.kt
-        └── PerformanceViewModel.kt
-```
+## Contributing
 
-## Building
-
-```bash
-# Debug build
-./gradlew assembleDebug
-
-# Release build
-./gradlew assembleRelease
-
-# Install on device
-./gradlew installDebug
-```
-
-## Release Signing
-
-- Copy `keystore.properties.example` to `keystore.properties` for local release signing.
-- Keep the keystore file under `keystore/`.
-- Both files are ignored by Git and stay local to your machine.
-
-## Requirements
-
-- Android Studio Ladybug (2024.2+)
-- JDK 17+
-- Android SDK 35
-- Kotlin 2.1+
+Contributions are welcome! Feel free to open issues, suggest features, or submit pull requests.
 
 ## License
 
-This project is for educational and personal use.
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
 <p align="center">
-  Built with Kotlin & Jetpack Compose
+  <strong>Vortex v1.1 Andromeda</strong><br/>
+  Built with Kotlin & Jetpack Compose<br/>
+  Made by <a href="https://github.com/JosuSM">JosuSM</a>
 </p>
