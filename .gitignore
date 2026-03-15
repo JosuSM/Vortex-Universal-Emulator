@@ -1,0 +1,28 @@
+# Build
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/app/build/
+/captures
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.jks
+*.keystore
+*.dex
+*.class
+*.log
+*.tmp
+*.bak
+/keystore.properties
+/keystore/
+
+# Kotlin
+*.kotlin_module
+
+# Generated
+/app/src/main/gen/

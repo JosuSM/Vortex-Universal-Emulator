@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Splash screen theme -->
+    <style name="Theme.Vortex.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/vortex_surface</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.Vortex</item>
+    </style>
+
+    <!-- Main theme (dark only) -->
+    <style name="Theme.Vortex" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:colorBackground">@color/vortex_surface</item>
+        <item name="android:statusBarColor">@color/vortex_surface</item>
+        <item name="android:navigationBarColor">@color/vortex_surface</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="colorPrimary">@color/vortex_cyan</item>
+        <item name="colorPrimaryDark">@color/vortex_cyan_dark</item>
+        <item name="colorAccent">@color/vortex_cyan</item>
+    </style>
+</resources>

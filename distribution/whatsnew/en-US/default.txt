@@ -1,0 +1,4 @@
+Initial internal VortexEmulator release.
+- Signed Android App Bundle workflow configured.
+- Manual track promotion flow configured.
+- Release signing and Google Play deployment are ready.

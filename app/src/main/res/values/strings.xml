@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vortex</string>
+    <string name="app_name_full">Vortex Emulator</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_library">Library</string>
+    <string name="nav_cores">Cores</string>
+    <string name="nav_performance">Device</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Home Screen -->
+    <string name="home_tagline">Performance. Compatibility. Style.</string>
+    <string name="home_continue_playing">Continue Playing</string>
+    <string name="home_favorites">Favorites</string>
+    <string name="home_quick_actions">Quick Actions</string>
+    <string name="home_scan_roms">Scan for ROMs</string>
+    <string name="home_manage_cores">Manage Cores</string>
+    <string name="home_auto_configure">Auto-Configure</string>
+
+    <!-- Library -->
+    <string name="library_title">Game Library</string>
+    <string name="library_search">Search games…</string>
+    <string name="library_empty">No games found</string>
+    <string name="library_empty_hint">Scan a folder to add ROMs to your library</string>
+    <string name="library_all">All</string>
+
+    <!-- Cores -->
+    <string name="cores_title">Emulation Cores</string>
+    <string name="cores_installed">Installed</string>
+    <string name="cores_available">Available to Download</string>
+    <string name="core_install">Install</string>
+    <string name="core_uninstall">Uninstall</string>
+
+    <!-- Performance -->
+    <string name="perf_title">Device Profile</string>
+    <string name="perf_gpu">GPU</string>
+    <string name="perf_recommended">Recommended Settings</string>
+    <string name="perf_drivers">GPU Drivers</string>
+
+    <!-- Emulation -->
+    <string name="emu_quick_menu">Quick Menu</string>
+    <string name="emu_save_state">Save State</string>
+    <string name="emu_load_state">Load State</string>
+    <string name="emu_rewind">Rewind</string>
+    <string name="emu_fast_forward">Fast Forward</string>
+    <string name="emu_reset">Reset</string>
+    <string name="emu_screenshot">Screenshot</string>
+    <string name="emu_cheats">Cheats</string>
+    <string name="emu_shaders">Shaders</string>
+    <string name="emu_toggle_controls">Toggle Controls</string>
+    <string name="emu_quit">Quit Game</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_graphics">Graphics</string>
+    <string name="settings_emulation">Emulation</string>
+    <string name="settings_interface">Interface</string>
+    <string name="settings_about">About</string>
+</resources>

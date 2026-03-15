@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Vortex Brand Colors -->
+    <color name="vortex_cyan">#FF00E5FF</color>
+    <color name="vortex_cyan_dark">#FF00B8D4</color>
+    <color name="vortex_purple">#FFBB86FC</color>
+    <color name="vortex_magenta">#FFFF4081</color>
+    <color name="vortex_green">#FF00E676</color>
+    <color name="vortex_surface">#FF0A0E1A</color>
+    <color name="vortex_surface_variant">#FF111827</color>
+    <color name="vortex_on_surface">#FFE8ECF4</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>
