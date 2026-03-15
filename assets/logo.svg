@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 108 108">
+  <!-- Background -->
+  <rect width="108" height="108" rx="24" fill="#0A0E1A"/>
+  <!-- V shape -->
+  <path d="M34,30 L54,78 L74,30 L66,30 L54,62 L42,30 Z" fill="#00E5FF"/>
+  <!-- Accent arc -->
+  <path d="M38,72 L54,84 L70,72" fill="none" stroke="#BB86FC" stroke-width="2.5"/>
+  <!-- Glow dot -->
+  <circle cx="54" cy="26" r="3" fill="#00E5FF"/>
+</svg>

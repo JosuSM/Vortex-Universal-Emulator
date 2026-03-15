@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp" width="120" alt="Vortex Logo"/>
+  <img src="assets/logo.svg" width="120" alt="Vortex Logo"/>
 </p>
 
 <h1 align="center">Vortex Emulator</h1>
