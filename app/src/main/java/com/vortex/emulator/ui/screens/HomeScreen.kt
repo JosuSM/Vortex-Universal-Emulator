@@ -1,7 +1,11 @@
 package com.vortex.emulator.ui.screens
 
+import android.content.res.Configuration
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -17,8 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vortex.emulator.ui.components.*
@@ -29,23 +36,68 @@ import com.vortex.emulator.ui.viewmodel.HomeViewModel
 fun HomeScreen(
     onGameClick: (Long) -> Unit,
     onViewAllRecent: () -> Unit,
+    onManageCoresClick: () -> Unit,
+    onPerformanceClick: () -> Unit,
+    onMultiplayerClick: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val recentGames by viewModel.recentGames.collectAsState()
     val favoriteGames by viewModel.favoriteGames.collectAsState()
     val gameCount by viewModel.gameCount.collectAsState()
     val chipsetTier by viewModel.chipsetTier.collectAsState()
+    val coreCount by viewModel.coreCount.collectAsState()
+    val multiplayerCoreCount by viewModel.multiplayerReadyCoreCount.collectAsState()
+    val isScanning by viewModel.isScanning.collectAsState()
+    val scanFilesScanned by viewModel.scanFilesScanned.collectAsState()
 
-    Column(
+    val snackbarHostState = remember { SnackbarHostState() }
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        uri?.let { viewModel.scanDirectory(it) }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.scanResult.collect { result ->
+            val message = when {
+                result.totalFound == 0 -> "No ROM files found in selected folder"
+                result.newAdded == 0 -> "Found ${result.totalFound} ROMs (all already in library)"
+                else -> "Found ${result.totalFound} ROMs, added ${result.newAdded} new games!"
+            }
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.scanError.collect { error ->
+            snackbarHostState.showSnackbar("Scan error: $error")
+        }
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = Color.Transparent
+    ) { scaffoldPadding ->
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .padding(scaffoldPadding)
     ) {
+        val compactLayout = maxWidth < 420.dp
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+        ) {
         // Hero Header
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp)
+                .height(if (isLandscape) 100.dp else if (compactLayout) 160.dp else 200.dp)
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
@@ -62,18 +114,41 @@ fun HomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
+                    .padding(if (compactLayout) 18.dp else 24.dp),
                 verticalArrangement = Arrangement.Center
             ) {
+                if (isLandscape) {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = "VORTEX",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Black,
+                            color = VortexCyan
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "EMULATOR",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Light,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = "Performance. Compatibility. Style.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
                 Text(
                     text = "VORTEX",
-                    style = MaterialTheme.typography.displaySmall,
+                    style = if (compactLayout) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.displaySmall,
                     fontWeight = FontWeight.Black,
                     color = VortexCyan
                 )
                 Text(
                     text = "EMULATOR",
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = if (compactLayout) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Light,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
@@ -83,39 +158,88 @@ fun HomeScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Quick Stats Row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            StatCard(
-                icon = Icons.Filled.SportsEsports,
-                value = "$gameCount",
-                label = "Games",
-                gradientColors = listOf(VortexCyan.copy(alpha = 0.15f), VortexCyan.copy(alpha = 0.05f)),
-                modifier = Modifier.weight(1f)
-            )
-            StatCard(
-                icon = Icons.Filled.Memory,
-                value = "14",
-                label = "Cores",
-                gradientColors = listOf(VortexPurple.copy(alpha = 0.15f), VortexPurple.copy(alpha = 0.05f)),
-                modifier = Modifier.weight(1f)
-            )
-            StatCard(
-                icon = Icons.Filled.Speed,
-                value = chipsetTier,
-                label = "Tier",
-                gradientColors = listOf(VortexGreen.copy(alpha = 0.15f), VortexGreen.copy(alpha = 0.05f)),
-                modifier = Modifier.weight(1f)
-            )
+        if (compactLayout) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    StatCard(
+                        icon = Icons.Filled.SportsEsports,
+                        value = "$gameCount",
+                        label = "Games",
+                        gradientColors = listOf(VortexCyan.copy(alpha = 0.15f), VortexCyan.copy(alpha = 0.05f)),
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatCard(
+                        icon = Icons.Filled.Memory,
+                        value = "$coreCount",
+                        label = "Cores",
+                        gradientColors = listOf(VortexPurple.copy(alpha = 0.15f), VortexPurple.copy(alpha = 0.05f)),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    StatCard(
+                        icon = Icons.Filled.Wifi,
+                        value = "$multiplayerCoreCount",
+                        label = "Netplay",
+                        gradientColors = listOf(VortexMagenta.copy(alpha = 0.15f), VortexMagenta.copy(alpha = 0.05f)),
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatCard(
+                        icon = Icons.Filled.Speed,
+                        value = chipsetTier,
+                        label = "Tier",
+                        gradientColors = listOf(VortexGreen.copy(alpha = 0.15f), VortexGreen.copy(alpha = 0.05f)),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                StatCard(
+                    icon = Icons.Filled.SportsEsports,
+                    value = "$gameCount",
+                    label = "Games",
+                    gradientColors = listOf(VortexCyan.copy(alpha = 0.15f), VortexCyan.copy(alpha = 0.05f)),
+                    modifier = Modifier.weight(1f)
+                )
+                StatCard(
+                    icon = Icons.Filled.Memory,
+                    value = "$coreCount",
+                    label = "Cores",
+                    gradientColors = listOf(VortexPurple.copy(alpha = 0.15f), VortexPurple.copy(alpha = 0.05f)),
+                    modifier = Modifier.weight(1f)
+                )
+                StatCard(
+                    icon = Icons.Filled.Wifi,
+                    value = "$multiplayerCoreCount",
+                    label = "Netplay",
+                    gradientColors = listOf(VortexMagenta.copy(alpha = 0.15f), VortexMagenta.copy(alpha = 0.05f)),
+                    modifier = Modifier.weight(1f)
+                )
+                StatCard(
+                    icon = Icons.Filled.Speed,
+                    value = chipsetTier,
+                    label = "Tier",
+                    gradientColors = listOf(VortexGreen.copy(alpha = 0.15f), VortexGreen.copy(alpha = 0.05f)),
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -161,34 +285,87 @@ fun HomeScreen(
 
         // Quick Actions
         SectionTitle(title = "Quick Actions")
+        if (isLandscape) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    QuickActionCard(
+                        icon = Icons.Filled.FolderOpen,
+                        title = if (isScanning) "Scanning… $scanFilesScanned files" else "Scan for ROMs",
+                        description = "Select a folder to find game files",
+                        accentColor = VortexCyan,
+                        onClick = { if (!isScanning) folderPickerLauncher.launch(null) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionCard(
+                        icon = Icons.Filled.Download,
+                        title = "Manage Cores",
+                        description = "Download and update cores",
+                        accentColor = VortexPurple,
+                        onClick = onManageCoresClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    QuickActionCard(
+                        icon = Icons.Filled.Wifi,
+                        title = "Multiplayer Hub",
+                        description = "Host or join sessions",
+                        accentColor = VortexMagenta,
+                        onClick = onMultiplayerClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionCard(
+                        icon = Icons.Filled.Tune,
+                        title = "Device Tuning",
+                        description = "Optimize for your device",
+                        accentColor = VortexGreen,
+                        onClick = onPerformanceClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        } else {
         Column(
             modifier = Modifier.padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             QuickActionCard(
                 icon = Icons.Filled.FolderOpen,
-                title = "Scan for ROMs",
-                description = "Search your device for game files",
+                title = if (isScanning) "Scanning… $scanFilesScanned files" else "Scan for ROMs",
+                description = "Select a folder to find game files",
                 accentColor = VortexCyan,
-                onClick = { viewModel.scanDefaultPaths() }
+                onClick = { if (!isScanning) folderPickerLauncher.launch(null) }
             )
             QuickActionCard(
                 icon = Icons.Filled.Download,
                 title = "Manage Cores",
                 description = "Download and update emulation cores",
                 accentColor = VortexPurple,
-                onClick = { }
+                onClick = onManageCoresClick
+            )
+            QuickActionCard(
+                icon = Icons.Filled.Wifi,
+                title = "Multiplayer Hub",
+                description = "Host or join netplay-ready sessions",
+                accentColor = VortexMagenta,
+                onClick = onMultiplayerClick
             )
             QuickActionCard(
                 icon = Icons.Filled.Tune,
-                title = "Auto-Configure",
-                description = "Optimize settings for your device",
+                title = "Device Tuning",
+                description = "Review performance and optimize for your device",
                 accentColor = VortexGreen,
-                onClick = { }
+                onClick = onPerformanceClick
             )
+        }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
     }
 }
 
@@ -213,7 +390,10 @@ fun StatCard(
                 )
                 .padding(16.dp)
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = label,
@@ -224,12 +404,16 @@ fun StatCard(
                 Text(
                     text = value,
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black
+                    fontWeight = FontWeight.Black,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -242,10 +426,12 @@ fun QuickActionCard(
     title: String,
     description: String,
     accentColor: androidx.compose.ui.graphics.Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Card(
         onClick = onClick,
+        modifier = modifier,
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -276,12 +462,16 @@ fun QuickActionCard(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
             Icon(

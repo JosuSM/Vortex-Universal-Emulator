@@ -1,6 +1,7 @@
 package com.vortex.emulator.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -21,53 +22,60 @@ fun VortexHeader(
     subtitle: String? = null,
     modifier: Modifier = Modifier
 ) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        VortexCyanDark.copy(alpha = 0.15f),
-                        VortexPurpleDark.copy(alpha = 0.1f),
-                        MaterialTheme.colorScheme.surface
-                    ),
-                    start = Offset(0f, 0f),
-                    end = Offset(500f, 300f)
+    BoxWithConstraints {
+        val compactHeader = maxWidth < 380.dp
+
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            VortexCyanDark.copy(alpha = 0.15f),
+                            VortexPurpleDark.copy(alpha = 0.1f),
+                            MaterialTheme.colorScheme.surface
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(500f, 300f)
+                    )
                 )
-            )
-            .padding(horizontal = 24.dp, vertical = 20.dp)
-    ) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Vortex accent bar
-                Box(
-                    modifier = Modifier
-                        .width(4.dp)
-                        .height(32.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(VortexCyan, VortexPurple)
+                .padding(horizontal = if (compactHeader) 18.dp else 24.dp, vertical = if (compactHeader) 16.dp else 20.dp)
+        ) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .width(4.dp)
+                            .height(if (compactHeader) 26.dp else 32.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(VortexCyan, VortexPurple)
+                                )
                             )
-                        )
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            if (subtitle != null) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp)
-                )
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = title,
+                        style = if (compactHeader) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+                if (subtitle != null) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = subtitle,
+                        style = if (compactHeader) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 16.dp),
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }

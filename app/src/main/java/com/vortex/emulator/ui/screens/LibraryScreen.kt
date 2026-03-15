@@ -1,9 +1,14 @@
 package com.vortex.emulator.ui.screens
 
+import android.content.res.Configuration
 import androidx.compose.animation.*
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -11,8 +16,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vortex.emulator.core.Platform
 import com.vortex.emulator.ui.components.*
@@ -30,13 +36,20 @@ fun LibraryScreen(
     val selectedPlatform by viewModel.selectedPlatform.collectAsState()
     val viewMode by viewModel.viewMode.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        VortexHeader(
-            title = "Game Library",
-            subtitle = "${games.size} games available"
-        )
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val configuration = LocalConfiguration.current
+        val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val compactLayout = maxWidth < 420.dp
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Column(modifier = Modifier.fillMaxSize()) {
+        if (!isLandscape) {
+            VortexHeader(
+                title = "Game Library",
+                subtitle = "${games.size} games available"
+            )
+        }
+
+        Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 12.dp))
 
         // Search bar
         OutlinedTextField(
@@ -140,7 +153,8 @@ fun LibraryScreen(
         if (games.isEmpty()) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .weight(1f)
+                    .fillMaxWidth()
                     .padding(32.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -165,18 +179,45 @@ fun LibraryScreen(
                 }
             }
         } else {
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(games, key = { it.id }) { game ->
-                    GameListItem(
-                        game = game,
-                        onClick = { onGameClick(game.id) }
-                    )
+            if (viewMode == ViewMode.GRID) {
+                val gridMinSize = when {
+                    isLandscape -> 160.dp
+                    compactLayout -> 148.dp
+                    else -> 180.dp
                 }
-                item { Spacer(modifier = Modifier.height(16.dp)) }
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(gridMinSize),
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(games, key = { it.id }) { game ->
+                        GameCard(
+                            game = game,
+                            onClick = { onGameClick(game.id) },
+                            cardWidth = null,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    item { Spacer(modifier = Modifier.height(16.dp)) }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(games, key = { it.id }) { game ->
+                        GameListItem(
+                            game = game,
+                            onClick = { onGameClick(game.id) }
+                        )
+                    }
+                    item { Spacer(modifier = Modifier.height(16.dp)) }
+                }
             }
+        }
         }
     }
 }

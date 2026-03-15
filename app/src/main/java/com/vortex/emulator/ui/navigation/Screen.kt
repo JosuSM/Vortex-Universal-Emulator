@@ -6,6 +6,8 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.outlined.Gamepad
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Memory
@@ -43,6 +45,12 @@ sealed class Screen(
         selectedIcon = Icons.Filled.Speed,
         unselectedIcon = Icons.Outlined.Speed
     )
+    data object Multiplayer : Screen(
+        route = "multiplayer",
+        title = "Online",
+        selectedIcon = Icons.Filled.Wifi,
+        unselectedIcon = Icons.Filled.Wifi
+    )
     data object Settings : Screen(
         route = "settings",
         title = "Settings",
@@ -59,6 +67,6 @@ sealed class Screen(
     }
 
     companion object {
-        val bottomNavItems = listOf(Home, Library, Cores, Performance, Settings)
+        val bottomNavItems = listOf(Home, Library, Cores, Multiplayer, Settings)
     }
 }

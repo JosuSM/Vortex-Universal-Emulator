@@ -6,7 +6,6 @@ import androidx.documentfile.provider.DocumentFile
 import com.vortex.emulator.core.Platform
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
@@ -22,15 +21,23 @@ class GameScanner @Inject constructor(
 
     /**
      * Scan a directory (SAF URI) for ROM files and add them to the library.
+     * onProgress is called with the number of files scanned so far.
      */
-    suspend fun scanDirectory(directoryUri: Uri): ScanResult = withContext(Dispatchers.IO) {
+    suspend fun scanDirectory(
+        directoryUri: Uri,
+        onProgress: (filesScanned: Int) -> Unit = {}
+    ): ScanResult = withContext(Dispatchers.IO) {
         val documentFile = DocumentFile.fromTreeUri(context, directoryUri)
-            ?: return@withContext ScanResult(0, 0, emptyList())
+            ?: return@withContext ScanResult(0, 0, listOf("Could not open folder"))
 
         val foundGames = mutableListOf<Game>()
         val errors = mutableListOf<String>()
+        var filesScanned = 0
 
-        scanRecursive(documentFile, foundGames, errors)
+        scanRecursive(documentFile, foundGames, errors) {
+            filesScanned++
+            onProgress(filesScanned)
+        }
 
         // Filter out already existing games
         val newGames = foundGames.filter { game ->
@@ -51,7 +58,10 @@ class GameScanner @Inject constructor(
     /**
      * Scan a local file path for ROMs.
      */
-    suspend fun scanPath(path: String): ScanResult = withContext(Dispatchers.IO) {
+    suspend fun scanPath(
+        path: String,
+        onProgress: (filesScanned: Int) -> Unit = {}
+    ): ScanResult = withContext(Dispatchers.IO) {
         val dir = File(path)
         if (!dir.exists() || !dir.isDirectory) {
             return@withContext ScanResult(0, 0, listOf("Directory not found: $path"))
@@ -59,8 +69,12 @@ class GameScanner @Inject constructor(
 
         val foundGames = mutableListOf<Game>()
         val errors = mutableListOf<String>()
+        var filesScanned = 0
 
-        scanFileRecursive(dir, foundGames, errors)
+        scanFileRecursive(dir, foundGames, errors) {
+            filesScanned++
+            onProgress(filesScanned)
+        }
 
         val newGames = foundGames.filter { game ->
             gameDao.getGameByPath(game.romPath) == null
@@ -80,12 +94,14 @@ class GameScanner @Inject constructor(
     private fun scanRecursive(
         document: DocumentFile,
         games: MutableList<Game>,
-        errors: MutableList<String>
+        errors: MutableList<String>,
+        onFileVisited: () -> Unit
     ) {
         for (file in document.listFiles()) {
             if (file.isDirectory) {
-                scanRecursive(file, games, errors)
+                scanRecursive(file, games, errors, onFileVisited)
             } else {
+                onFileVisited()
                 val name = file.name ?: continue
                 val ext = name.substringAfterLast('.', "").lowercase()
                 if (ext in allExtensions) {
@@ -110,13 +126,15 @@ class GameScanner @Inject constructor(
     private fun scanFileRecursive(
         dir: File,
         games: MutableList<Game>,
-        errors: MutableList<String>
+        errors: MutableList<String>,
+        onFileVisited: () -> Unit
     ) {
         val files = dir.listFiles() ?: return
         for (file in files) {
             if (file.isDirectory) {
-                scanFileRecursive(file, games, errors)
+                scanFileRecursive(file, games, errors, onFileVisited)
             } else {
+                onFileVisited()
                 val ext = file.extension.lowercase()
                 if (ext in allExtensions) {
                     val platforms = Platform.fromExtension(ext)

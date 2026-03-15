@@ -92,6 +92,24 @@ enum class Platform(
         abbreviation = "SAT",
         romExtensions = listOf("bin", "cue", "iso", "chd"),
         icon = "saturn"
+    ),
+    THREEDS(
+        displayName = "Nintendo 3DS",
+        abbreviation = "3DS",
+        romExtensions = listOf("3ds", "cci", "cxi", "cia"),
+        icon = "3ds"
+    ),
+    PS2(
+        displayName = "PlayStation 2",
+        abbreviation = "PS2",
+        romExtensions = listOf("iso", "bin", "chd", "gz"),
+        icon = "ps2"
+    ),
+    VITA(
+        displayName = "PlayStation Vita",
+        abbreviation = "VITA",
+        romExtensions = listOf("vpk", "mai"),
+        icon = "vita"
     );
 
     companion object {

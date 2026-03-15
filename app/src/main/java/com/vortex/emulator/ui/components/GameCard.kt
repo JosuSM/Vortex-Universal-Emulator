@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.vortex.emulator.core.Platform
 import com.vortex.emulator.game.Game
@@ -28,13 +29,15 @@ fun GameCard(
     game: Game,
     onClick: () -> Unit,
     onFavoriteToggle: (() -> Unit)? = null,
+    cardWidth: Dp? = 160.dp,
     modifier: Modifier = Modifier
 ) {
     val platformColor = game.platform.toColor()
 
     Card(
-        modifier = modifier
-            .width(160.dp)
+        modifier = Modifier
+            .then(if (cardWidth != null) Modifier.width(cardWidth) else Modifier)
+            .then(modifier)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
@@ -234,4 +237,7 @@ fun Platform.toColor(): Color = when (this) {
     Platform.GAMECUBE -> GameCubePurple
     Platform.WII -> WiiWhite
     Platform.SATURN -> SaturnBlue
+    Platform.THREEDS -> ThreeDSRed
+    Platform.PS2 -> PS2Blue
+    Platform.VITA -> VitaBlue
 }

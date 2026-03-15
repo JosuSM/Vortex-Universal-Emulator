@@ -33,6 +33,7 @@ class LibraryViewModel @Inject constructor(
         Pair(query, platform)
     }.flatMapLatest { (query, platform) ->
         when {
+            query.isNotBlank() && platform != null -> gameDao.searchGamesByPlatform(query, platform)
             query.isNotBlank() -> gameDao.searchGames(query)
             platform != null -> gameDao.getGamesByPlatform(platform)
             else -> gameDao.getAllGames()

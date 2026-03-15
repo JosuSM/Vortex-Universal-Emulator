@@ -29,7 +29,6 @@ fun CoresScreen(
     viewModel: CoresViewModel = hiltViewModel()
 ) {
     val installedCores by viewModel.installedCores.collectAsState()
-    val availableCores by viewModel.availableCores.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
         VortexHeader(
@@ -41,46 +40,17 @@ fun CoresScreen(
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Installed section
-            if (installedCores.isNotEmpty()) {
-                item {
-                    Text(
-                        text = "INSTALLED",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = VortexGreen,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-                }
-                items(installedCores, key = { it.id }) { core ->
-                    CoreCard(
-                        core = core,
-                        onInstall = { },
-                        onUninstall = { viewModel.uninstallCore(core) }
-                    )
-                }
+            item {
+                Text(
+                    text = "INSTALLED",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = VortexGreen,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
             }
-
-            // Available for download
-            val notInstalled = availableCores.filter { !it.isInstalled }
-            if (notInstalled.isNotEmpty()) {
-                item {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "AVAILABLE TO DOWNLOAD",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = VortexCyan,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-                }
-                items(notInstalled, key = { it.id }) { core ->
-                    CoreCard(
-                        core = core,
-                        onInstall = { viewModel.installCore(core) },
-                        onUninstall = { }
-                    )
-                }
+            items(installedCores, key = { it.id }) { core ->
+                CoreCard(core = core)
             }
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -91,9 +61,7 @@ fun CoresScreen(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CoreCard(
-    core: CoreInfo,
-    onInstall: () -> Unit,
-    onUninstall: () -> Unit
+    core: CoreInfo
 ) {
     val primaryPlatform = core.supportedPlatforms.firstOrNull()
     val platformColor = primaryPlatform?.toColor() ?: VortexCyan
@@ -131,45 +99,30 @@ fun CoreCard(
                     Text(
                         text = core.displayName,
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                     Text(
                         text = "v${core.version} • ${core.author}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                 }
 
-                if (core.isInstalled) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = VortexGreen.copy(alpha = 0.15f)
-                    ) {
-                        Text(
-                            text = "Installed",
-                            color = VortexGreen,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                        )
-                    }
-                } else {
-                    FilledTonalButton(
-                        onClick = onInstall,
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = VortexCyan.copy(alpha = 0.15f),
-                            contentColor = VortexCyan
-                        )
-                    ) {
-                        Icon(
-                            Icons.Filled.Download,
-                            contentDescription = "Download",
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("${core.downloadSizeMb} MB")
-                    }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = VortexGreen.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = "Installed",
+                        color = VortexGreen,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
                 }
             }
 
@@ -195,7 +148,10 @@ fun CoreCard(
 
             // Platforms
             Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 core.supportedPlatforms.forEach { platform ->
                     Surface(
                         shape = RoundedCornerShape(6.dp),
