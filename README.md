@@ -136,12 +136,6 @@ app/src/main/java/com/vortex/emulator/
 ./gradlew installDebug
 ```
 
-## Release Signing
-
-- Copy `keystore.properties.example` to `keystore.properties` for local release signing.
-- Keep the keystore file under `keystore/`.
-- Both files are ignored by Git and stay local to your machine.
-
 ## Requirements
 
 - Android Studio Ladybug (2024.2+)
