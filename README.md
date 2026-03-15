@@ -142,21 +142,6 @@ app/src/main/java/com/vortex/emulator/
 - Keep the keystore file under `keystore/`.
 - Both files are ignored by Git and stay local to your machine.
 
-### CI Release Uploads
-
-- Gradle now prefers these environment variables when they are present: `VORTEX_SIGNING_STORE_BASE64`, `VORTEX_SIGNING_STORE_FILE`, `VORTEX_SIGNING_STORE_PASSWORD`, `VORTEX_SIGNING_KEY_ALIAS`, `VORTEX_SIGNING_KEY_PASSWORD`.
-- Use `VORTEX_SIGNING_STORE_BASE64` in CI when you want to inject the keystore directly from a secret.
-- Use `VORTEX_SIGNING_STORE_FILE` when your runner mounts the keystore as a file.
-- The included workflow at `.github/workflows/android-release.yml` builds a signed release APK and uploads it as an artifact.
-
-```bash
-export VORTEX_SIGNING_STORE_BASE64="$(base64 -w0 keystore/release-signing.jks)"
-export VORTEX_SIGNING_STORE_PASSWORD="your-store-password"
-export VORTEX_SIGNING_KEY_ALIAS="vortex-release"
-export VORTEX_SIGNING_KEY_PASSWORD="your-key-password"
-./gradlew assembleRelease
-```
-
 ## Requirements
 
 - Android Studio Ladybug (2024.2+)
