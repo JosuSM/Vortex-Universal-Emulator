@@ -9,9 +9,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vortex.emulator.core.CoreInfo
 import com.vortex.emulator.core.CoreManager
+import com.vortex.emulator.emulation.AudioLatency
 import com.vortex.emulator.emulation.EmulationEngine
+import com.vortex.emulator.emulation.GamepadManager
+import com.vortex.emulator.emulation.VortexNative
 import com.vortex.emulator.game.Game
 import com.vortex.emulator.game.GameDao
+import com.vortex.emulator.netplay.InternetNetplayManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
@@ -36,7 +40,9 @@ class EmulationViewModel @Inject constructor(
     private val gameDao: GameDao,
     private val coreManager: CoreManager,
     @ApplicationContext private val appContext: Context,
-    val engine: EmulationEngine
+    val engine: EmulationEngine,
+    private val gamepadManager: GamepadManager,
+    private val internetNetplay: InternetNetplayManager
 ) : ViewModel() {
 
     private val gameId: Long = savedStateHandle["gameId"] ?: 0L
@@ -85,11 +91,24 @@ class EmulationViewModel @Inject constructor(
     private val _audioEnabled = MutableStateFlow(true)
     val audioEnabled: StateFlow<Boolean> = _audioEnabled.asStateFlow()
 
+    // Audio volume (0.0 to 1.0)
+    private val _audioVolume = MutableStateFlow(1.0f)
+    val audioVolume: StateFlow<Float> = _audioVolume.asStateFlow()
+
+    // Audio latency
+    private val _audioLatency = MutableStateFlow(AudioLatency.MEDIUM)
+    val audioLatency: StateFlow<AudioLatency> = _audioLatency.asStateFlow()
+
     // Quick save slots
     private val _quickSaveSlot = MutableStateFlow(0)
     val quickSaveSlot: StateFlow<Int> = _quickSaveSlot.asStateFlow()
 
+    // Gamepad state
+    val isGamepadConnected: Boolean get() = gamepadManager.isGamepadConnected
+    val gamepadName: String? get() = gamepadManager.connectedGamepadName
+
     init {
+        gamepadManager.engine = engine
         loadAndStart()
     }
 
@@ -137,6 +156,9 @@ class EmulationViewModel @Inject constructor(
                     _currentFps.value = engine.currentFps
                 }
 
+                // Set up multiplayer relay if lobby game is active
+                setupMultiplayerRelay()
+
             } catch (e: Exception) {
                 _error.value = e.message ?: "Unexpected error"
                 _emulationState.value = EmulationState.ERROR
@@ -156,6 +178,47 @@ class EmulationViewModel @Inject constructor(
 
     fun resetGame() {
         engine.reset()
+    }
+
+    /**
+     * If this emulation was launched from a lobby game, set up input relay:
+     * - Before each frame: apply remote players' input to their ports
+     * - After each frame: send local player's input to remote players
+     */
+    /** The local player's port index for the current multiplayer session (0 = host). */
+    private val _localPlayerIndex = MutableStateFlow(0)
+    val localPlayerIndex: StateFlow<Int> = _localPlayerIndex.asStateFlow()
+
+    /** True when an internet multiplayer game is active. */
+    val isMultiplayerActive: Boolean get() = internetNetplay.isGameActive.value
+
+    private fun setupMultiplayerRelay() {
+        if (!internetNetplay.isGameActive.value) return
+
+        val localIndex = internetNetplay.localPlayerIndex.value
+        val players = internetNetplay.lobbyClient.players.value
+        val totalPlayers = players.size.coerceAtLeast(2)
+
+        // Route local input capture & gamepad to the correct player port
+        _localPlayerIndex.value = localIndex
+        engine.localPlayerPort = localIndex
+        gamepadManager.activePort = localIndex
+
+        engine.onPreFrame = {
+            // Apply every remote player's input to their respective port
+            for (p in players) {
+                if (p.playerIndex == localIndex) continue
+                val input = internetNetplay.getRemoteInput(p.playerIndex)
+                for (btn in 0 until 16) {
+                    VortexNative.setInputState(p.playerIndex, btn, input[btn])
+                }
+            }
+        }
+
+        engine.onPostFrame = {
+            // Send local input to all remote players via encrypted relay
+            internetNetplay.sendInput(engine.localInputState)
+        }
     }
 
     // ── Save / Load State ───────────────────────────────────────────
@@ -254,6 +317,17 @@ class EmulationViewModel @Inject constructor(
         showStatus(if (enabled) "Audio ON" else "Audio OFF")
     }
 
+    fun setAudioVolume(volume: Float) {
+        _audioVolume.value = volume.coerceIn(0f, 1f)
+        engine.setAudioVolume(_audioVolume.value)
+    }
+
+    fun setAudioLatency(latency: AudioLatency) {
+        _audioLatency.value = latency
+        engine.setAudioLatency(latency)
+        showStatus("Audio latency: ${latency.label}")
+    }
+
     // ── Screenshot ──────────────────────────────────────────────────
 
     fun takeScreenshot() {
@@ -310,6 +384,8 @@ class EmulationViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        engine.onPreFrame = null
+        engine.onPostFrame = null
         engine.stop()
     }
 }

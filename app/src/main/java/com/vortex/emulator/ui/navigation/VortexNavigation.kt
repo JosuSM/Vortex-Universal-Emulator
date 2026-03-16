@@ -139,11 +139,21 @@ fun VortexNavHost(navController: NavHostController) {
         ) { innerPadding ->
             NavHost(
                 navController = navController,
-                startDestination = Screen.Home.route,
+                startDestination = Screen.Splash.route,
                 modifier = Modifier.padding(innerPadding),
                 enterTransition = { fadeIn(animationSpec = tween(300)) },
                 exitTransition = { fadeOut(animationSpec = tween(300)) }
             ) {
+            composable(Screen.Splash.route) {
+                VortexSplashScreen(
+                    onFinished = {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.Splash.route) { inclusive = true }
+                        }
+                    }
+                )
+            }
+
             composable(Screen.Home.route) {
                 HomeScreen(
                     onGameClick = { gameId ->
@@ -189,7 +199,22 @@ fun VortexNavHost(navController: NavHostController) {
             }
 
             composable(Screen.Settings.route) {
-                SettingsScreen()
+                SettingsScreen(
+                    onNavigateToChangelog = {
+                        navController.navigate(Screen.Changelog.route)
+                    },
+                    onNavigateToPatcher = {
+                        navController.navigate(Screen.Patcher.route)
+                    }
+                )
+            }
+
+            composable(Screen.Changelog.route) {
+                ChangelogScreen(onBack = { navController.popBackStack() })
+            }
+
+            composable(Screen.Patcher.route) {
+                PatcherScreen(onBack = { navController.popBackStack() })
             }
 
             composable(

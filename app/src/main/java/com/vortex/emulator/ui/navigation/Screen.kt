@@ -66,6 +66,27 @@ sealed class Screen(
         fun createRoute(gameId: Long) = "emulation/$gameId"
     }
 
+    data object Changelog : Screen(
+        route = "changelog",
+        title = "What's New",
+        selectedIcon = Icons.Filled.Gamepad,
+        unselectedIcon = Icons.Outlined.Gamepad
+    )
+
+    data object Splash : Screen(
+        route = "splash",
+        title = "Splash",
+        selectedIcon = Icons.Filled.Home,
+        unselectedIcon = Icons.Outlined.Home
+    )
+
+    data object Patcher : Screen(
+        route = "patcher",
+        title = "ROM Patcher",
+        selectedIcon = Icons.Filled.Home,
+        unselectedIcon = Icons.Outlined.Home
+    )
+
     companion object {
         val bottomNavItems = listOf(Home, Library, Cores, Multiplayer, Settings)
     }

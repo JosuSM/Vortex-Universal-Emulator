@@ -19,10 +19,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.vortex.emulator.core.Platform
+import com.vortex.emulator.game.Game
 import com.vortex.emulator.ui.components.*
 import com.vortex.emulator.ui.theme.VortexCyan
+import com.vortex.emulator.ui.theme.VortexGreen
 import com.vortex.emulator.ui.viewmodel.LibraryViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,6 +38,9 @@ fun LibraryScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedPlatform by viewModel.selectedPlatform.collectAsState()
     val viewMode by viewModel.viewMode.collectAsState()
+
+    // Core selector dialog state
+    var coreSelectorGame by remember { mutableStateOf<Game?>(null) }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val configuration = LocalConfiguration.current
@@ -196,6 +202,7 @@ fun LibraryScreen(
                         GameCard(
                             game = game,
                             onClick = { onGameClick(game.id) },
+                            onLongPress = { coreSelectorGame = game },
                             cardWidth = null,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -211,13 +218,98 @@ fun LibraryScreen(
                     items(games, key = { it.id }) { game ->
                         GameListItem(
                             game = game,
-                            onClick = { onGameClick(game.id) }
+                            onClick = { onGameClick(game.id) },
+                            onLongPress = { coreSelectorGame = game }
                         )
                     }
                     item { Spacer(modifier = Modifier.height(16.dp)) }
                 }
             }
         }
+        }
+
+        // Core selection dialog (shown on long press)
+        coreSelectorGame?.let { game ->
+            val cores = remember(game.platform) { viewModel.getCoresForGame(game) }
+            val currentCoreId = game.coreId
+
+            AlertDialog(
+                onDismissRequest = { coreSelectorGame = null },
+                title = {
+                    Text(
+                        text = "Select Core",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column {
+                        Text(
+                            text = game.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        cores.forEach { core ->
+                            val isSelected = core.id == currentCoreId ||
+                                (currentCoreId == null && core == cores.firstOrNull())
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSelected)
+                                    VortexCyan.copy(alpha = 0.12f)
+                                else MaterialTheme.colorScheme.surfaceContainer,
+                                onClick = {
+                                    viewModel.setCoreForGame(game, core)
+                                    coreSelectorGame = null
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = core.displayName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isSelected) VortexCyan
+                                                else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = core.description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    if (isSelected) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Icon(
+                                            Icons.Filled.CheckCircle,
+                                            contentDescription = "Selected",
+                                            tint = VortexGreen,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { coreSelectorGame = null }) {
+                        Text("Cancel", color = VortexCyan)
+                    }
+                }
+            )
         }
     }
 }

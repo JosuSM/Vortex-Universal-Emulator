@@ -2,6 +2,8 @@ package com.vortex.emulator.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.vortex.emulator.core.CoreInfo
+import com.vortex.emulator.core.CoreManager
 import com.vortex.emulator.core.Platform
 import com.vortex.emulator.game.Game
 import com.vortex.emulator.game.GameDao
@@ -9,11 +11,13 @@ import com.vortex.emulator.ui.screens.ViewMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
-    private val gameDao: GameDao
+    private val gameDao: GameDao,
+    private val coreManager: CoreManager
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -50,5 +54,19 @@ class LibraryViewModel @Inject constructor(
 
     fun setViewMode(mode: ViewMode) {
         _viewMode.value = mode
+    }
+
+    fun getCoresForGame(game: Game): List<CoreInfo> {
+        return coreManager.getCoresForPlatform(game.platform)
+    }
+
+    fun getSelectedCoreId(game: Game): String? {
+        return game.coreId
+    }
+
+    fun setCoreForGame(game: Game, core: CoreInfo) {
+        viewModelScope.launch {
+            gameDao.updateGame(game.copy(coreId = core.id))
+        }
     }
 }

@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.1_Andromeda-00E5FF?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-2.1_Galaxy-00E5FF?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/Kotlin-2.1-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin"/>
@@ -26,7 +26,8 @@ Most emulators feel like developer tools. Vortex feels like a **gaming app** —
 - **Smart hardware detection** — Automatically tunes settings for your chipset
 - **Gorgeous dark UI** — Material 3 with neon cyan & purple accents
 - **Save anywhere** — 10 quick-save slots, export/import, rewind time
-- **Play together** — Local 2-player and LAN netplay built in
+- **Play together** — Internet & LAN multiplayer for up to 8 players
+- **Immersive gaming** — Full-screen emulation with hidden system bars
 
 ---
 
@@ -64,6 +65,8 @@ Most emulators feel like developer tools. Vortex feels like a **gaming app** —
 - **8-direction D-Pad** with diagonal support and visual feedback
 - **ABXY buttons** with radial gradients and press animations
 - Analog stick, shoulder buttons (L/R), Start/Select
+- **Physical gamepad support** — auto-detected with full button mapping
+- **NDS/3DS touch screen input** — tap directly on the touch display
 - Haptic feedback on all controls
 - Landscape & portrait optimized layouts
 - Hide/show controls on the fly
@@ -75,9 +78,12 @@ Most emulators feel like developer tools. Vortex feels like a **gaming app** —
 - Fast forward for grinding
 
 ### Multiplayer
-- Local 2-player mode with on-screen player toggle
-- UDP LAN netplay — host, join, or browse lobbies
-- Platform-filtered game search
+- **Internet multiplayer** — encrypted WebSocket lobby with AES-256-GCM
+- **2–8 players** per room with password-protected lobbies
+- Local multiplayer with on-screen player toggle
+- LAN netplay — host, join, or browse lobbies
+- Real-time input relay bridge during gameplay
+- Platform-filtered game search and auto-resolution
 
 ### Smart Hardware
 - Auto-detects Snapdragon, Dimensity, Exynos, Tensor, Kirin
@@ -85,11 +91,24 @@ Most emulators feel like developer tools. Vortex feels like a **gaming app** —
 - Recommends optimal settings per game
 - GPU driver management (Turnip, Freedreno, PanVK, Panfrost)
 
-### Design
+### Experience
+- **Animated splash screen** — vortex rings, starfield particles, and spring-animated logo
+- **Immersive mode** — status and navigation bars hidden during emulation
 - Material Design 3 dark theme with neon accents
 - Scrollable Quick Menu that works in landscape
 - Game library with platform badges and cover art
+- In-app changelog with release notes
+- Identified as a game by Android for Game Dashboard integration
 - Clean, focused UI — no clutter
+
+### ROM Patcher
+- **6 patch formats** — IPS, UPS, BPS, xdelta3/VCDIFF, PPF (v1/v2/v3), APS (GBA + N64)
+- **Auto-detection** — identifies patch format from magic bytes and file extension
+- **Patch stacking** — apply multiple patches in sequence with drag-to-reorder
+- **CRC32 + MD5 checksums** — verify ROM integrity before and after patching
+- **Auto backup & restore** — original ROM saved automatically, one-tap undo
+- **Output to new file** — optionally write patched ROM separately
+- **Batch progress** — visual tracking for multi-patch operations
 
 ---
 
@@ -135,7 +154,9 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | Navigation | Navigation Compose |
 | Image Loading | Coil |
 | Settings | DataStore Preferences |
+| Networking | OkHttp WebSocket + AES-256-GCM |
 | Emulation | libretro API via JNI |
+| Lobby Server | Node.js + ws (deployed on Render) |
 
 ---
 
@@ -150,7 +171,7 @@ This project is licensed under the [MIT License](LICENSE).
 ---
 
 <p align="center">
-  <strong>Vortex v1.1 Andromeda</strong><br/>
+  <strong>Vortex v2.1 Galaxy</strong><br/>
   Built with Kotlin & Jetpack Compose<br/>
   Made by <a href="https://github.com/JosuSM">JosuSM</a>
 </p>

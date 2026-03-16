@@ -100,16 +100,34 @@ class CoreManager @Inject constructor(
             ),
             // ── N64 ─────────────────────────────────────────────
             CoreInfo(
-                id = "vortex_n64_mupen",
-                name = "Mupen64Plus-Next",
-                displayName = "Mupen64Plus (N64)",
+                id = "vortex_n64_mupen_gles3",
+                name = "Mupen64Plus-Next (GLES3)",
+                displayName = "Mupen64Plus GLES3 (N64)",
                 version = "2.6",
                 author = "Mupen64Plus Team",
-                description = "High-compatibility N64 emulator with GLideN64 plugin",
+                description = "High-compatibility N64 emulator with GLideN64 plugin (GLES3)",
                 supportedPlatforms = listOf(Platform.N64),
-                libraryName = "mupen64plus_next",
+                libraryName = "mupen64plus_next_gles3",
                 isBundled = true,
-                downloadSizeMb = 8.5f,
+                downloadSizeMb = 2.4f,
+                features = setOf(
+                    CoreFeature.SAVE_STATES, CoreFeature.FAST_FORWARD,
+                    CoreFeature.CHEATS, CoreFeature.HIGH_RESOLUTION,
+                    CoreFeature.OPENGL_RENDERER, CoreFeature.ANALOG_STICK,
+                    CoreFeature.RUMBLE
+                )
+            ),
+            CoreInfo(
+                id = "vortex_n64_mupen_gles2",
+                name = "Mupen64Plus-Next (GLES2)",
+                displayName = "Mupen64Plus GLES2 (N64)",
+                version = "2.6",
+                author = "Mupen64Plus Team",
+                description = "N64 emulator for older devices with GLES2 support",
+                supportedPlatforms = listOf(Platform.N64),
+                libraryName = "mupen64plus_next_gles2",
+                isBundled = true,
+                downloadSizeMb = 2.4f,
                 features = setOf(
                     CoreFeature.SAVE_STATES, CoreFeature.FAST_FORWARD,
                     CoreFeature.CHEATS, CoreFeature.HIGH_RESOLUTION,
@@ -402,6 +420,80 @@ class CoreManager @Inject constructor(
                     CoreFeature.SAVE_STATES, CoreFeature.FAST_FORWARD,
                     CoreFeature.CHEATS, CoreFeature.SHADERS,
                     CoreFeature.NETPLAY
+                )
+            ),
+            // ── GameCube / Wii ──────────────────────────────────
+            CoreInfo(
+                id = "vortex_gcn_dolphin",
+                name = "Dolphin",
+                displayName = "Dolphin (GCN/Wii)",
+                version = "5.0",
+                author = "Dolphin Team",
+                description = "Leading GameCube and Wii emulator with high compatibility",
+                supportedPlatforms = listOf(Platform.GAMECUBE, Platform.WII),
+                libraryName = "dolphin",
+                isBundled = false,
+                downloadSizeMb = 5.8f,
+                features = setOf(
+                    CoreFeature.SAVE_STATES, CoreFeature.FAST_FORWARD,
+                    CoreFeature.CHEATS, CoreFeature.HIGH_RESOLUTION,
+                    CoreFeature.VULKAN_RENDERER, CoreFeature.OPENGL_RENDERER,
+                    CoreFeature.ANALOG_STICK, CoreFeature.RUMBLE,
+                    CoreFeature.WIDESCREEN_HACK, CoreFeature.NETPLAY
+                )
+            ),
+            // ── Nintendo 3DS ────────────────────────────────────
+            CoreInfo(
+                id = "vortex_3ds_citra",
+                name = "Citra",
+                displayName = "Citra (3DS)",
+                version = "2024.06",
+                author = "Citra Team",
+                description = "Feature-rich Nintendo 3DS emulator with upscaling support",
+                supportedPlatforms = listOf(Platform.THREEDS),
+                libraryName = "citra",
+                isBundled = false,
+                downloadSizeMb = 9.5f,
+                features = setOf(
+                    CoreFeature.SAVE_STATES, CoreFeature.FAST_FORWARD,
+                    CoreFeature.CHEATS, CoreFeature.HIGH_RESOLUTION,
+                    CoreFeature.OPENGL_RENDERER, CoreFeature.ANALOG_STICK,
+                    CoreFeature.TOUCH_OVERLAY, CoreFeature.SHADERS
+                )
+            ),
+            CoreInfo(
+                id = "vortex_3ds_panda3ds",
+                name = "Panda3DS",
+                displayName = "Panda3DS (3DS)",
+                version = "2024.10",
+                author = "Panda3DS Team",
+                description = "Lightweight 3DS emulator with growing compatibility",
+                supportedPlatforms = listOf(Platform.THREEDS),
+                libraryName = "panda3ds",
+                isBundled = false,
+                downloadSizeMb = 4.9f,
+                features = setOf(
+                    CoreFeature.SAVE_STATES, CoreFeature.FAST_FORWARD,
+                    CoreFeature.OPENGL_RENDERER, CoreFeature.ANALOG_STICK,
+                    CoreFeature.TOUCH_OVERLAY
+                )
+            ),
+            // ── PlayStation 2 ───────────────────────────────────
+            CoreInfo(
+                id = "vortex_ps2_play",
+                name = "Play!",
+                displayName = "Play! (PS2)",
+                version = "2024.12",
+                author = "Jean-Philip Desjardins",
+                description = "PlayStation 2 emulator with Vulkan and OpenGL rendering",
+                supportedPlatforms = listOf(Platform.PS2),
+                libraryName = "play",
+                isBundled = false,
+                downloadSizeMb = 1.6f,
+                features = setOf(
+                    CoreFeature.SAVE_STATES, CoreFeature.FAST_FORWARD,
+                    CoreFeature.VULKAN_RENDERER, CoreFeature.OPENGL_RENDERER,
+                    CoreFeature.ANALOG_STICK, CoreFeature.RUMBLE
                 )
             )
         )

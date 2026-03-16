@@ -19,6 +19,9 @@
     <!-- Internet for downloading libretro cores -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Network state for offline detection -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- Gamepad support -->
     <uses-feature android:name="android.hardware.gamepad" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
@@ -39,6 +42,9 @@
         android:theme="@style/Theme.Vortex.Splash"
         android:largeHeap="true"
         android:hardwareAccelerated="true"
+        android:usesCleartextTraffic="true"
+        android:appCategory="game"
+        android:isGame="true"
         tools:targetApi="35">
 
         <activity

@@ -1,10 +1,13 @@
 package com.vortex.emulator.ui.viewmodel
 
+import android.app.Application
+import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vortex.emulator.core.CoreManager
 import com.vortex.emulator.core.CoreFeature
+import com.vortex.emulator.emulation.CoreDownloader
 import com.vortex.emulator.game.Game
 import com.vortex.emulator.game.GameDao
 import com.vortex.emulator.game.GameScanner
@@ -17,10 +20,12 @@ import javax.inject.Inject
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
+    private val application: Application,
     private val gameDao: GameDao,
     private val gameScanner: GameScanner,
     private val chipsetDetector: ChipsetDetector,
-    private val coreManager: CoreManager
+    private val coreManager: CoreManager,
+    private val coreDownloader: CoreDownloader
 ) : ViewModel() {
 
     val recentGames: StateFlow<List<Game>> = gameDao.getRecentGames(10)
@@ -40,9 +45,15 @@ class HomeViewModel @Inject constructor(
         .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
+    val installedCoreCount: StateFlow<Int> = coreManager.installedCores
+        .map { cores -> cores.count { it.isInstalled } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
     val multiplayerReadyCoreCount: StateFlow<Int> = coreManager.availableCores
         .map { cores -> cores.count { CoreFeature.NETPLAY in it.features } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    fun isOffline(): Boolean = !coreDownloader.isNetworkAvailable()
 
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
@@ -63,6 +74,14 @@ class HomeViewModel @Inject constructor(
     }
 
     fun scanDirectory(uri: Uri) {
+        // Persist read permission so content:// URIs remain accessible across app restarts
+        try {
+            application.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (_: SecurityException) { /* best effort */ }
+
         viewModelScope.launch {
             _isScanning.value = true
             _scanFilesScanned.value = 0

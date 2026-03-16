@@ -89,8 +89,8 @@ android {
         applicationId = "com.vortex.emulator"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0-alpha"
+        versionCode = 2
+        versionName = "2.1-Galaxy"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
@@ -175,8 +175,8 @@ dependencies {
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     // Hilt DI
-    implementation("com.google.dagger:hilt-android:2.51.1")
-    ksp("com.google.dagger:hilt-android-compiler:2.51.1")
+    implementation("com.google.dagger:hilt-android:2.55")
+    ksp("com.google.dagger:hilt-android-compiler:2.55")
 
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.1.1")
@@ -194,6 +194,9 @@ dependencies {
 
     // DocumentFile (SAF)
     implementation("androidx.documentfile:documentfile:1.0.1")
+
+    // OkHttp (WebSocket for lobby signaling + HTTP)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Debugging
     debugImplementation("androidx.compose.ui:ui-tooling")

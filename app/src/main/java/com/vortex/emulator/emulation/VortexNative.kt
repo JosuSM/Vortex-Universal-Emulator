@@ -62,6 +62,24 @@ object VortexNative {
     /** Get the serialization size for the current core/game. */
     external fun getSerializeSize(): Long
 
+    /** Returns true if the current core uses hardware-accelerated (OpenGL) rendering. */
+    external fun isHardwareRendered(): Boolean
+
+    /** Set a core option key/value pair. */
+    external fun setCoreOption(key: String, value: String)
+
+    /** Set pointer/touch state for NDS-like touch screens. x/y in libretro coords (-0x7FFF..0x7FFF). */
+    external fun setPointerState(x: Int, y: Int, pressed: Boolean)
+
+    /** Save SRAM (battery save) to file. */
+    external fun saveSRAM(path: String): Boolean
+
+    /** Load SRAM (battery save) from file. */
+    external fun loadSRAM(path: String): Boolean
+
+    /** Set frame skip level (0 = off, 1 = every other, 2 = skip 2 of 3, etc.). */
+    external fun setFrameSkip(skip: Int)
+
     /* Libretro button ID constants (matching libretro.h) */
     const val RETRO_DEVICE_ID_JOYPAD_B      = 0
     const val RETRO_DEVICE_ID_JOYPAD_Y      = 1
@@ -75,4 +93,8 @@ object VortexNative {
     const val RETRO_DEVICE_ID_JOYPAD_X      = 9
     const val RETRO_DEVICE_ID_JOYPAD_L      = 10
     const val RETRO_DEVICE_ID_JOYPAD_R      = 11
+    const val RETRO_DEVICE_ID_JOYPAD_L2     = 12
+    const val RETRO_DEVICE_ID_JOYPAD_R2     = 13
+    const val RETRO_DEVICE_ID_JOYPAD_L3     = 14
+    const val RETRO_DEVICE_ID_JOYPAD_R3     = 15
 }

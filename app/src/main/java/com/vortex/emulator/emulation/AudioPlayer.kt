@@ -5,26 +5,42 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import android.util.Log
 
-/**
- * Plays interleaved stereo PCM audio produced by the libretro core.
- */
+enum class AudioLatency(val multiplier: Int, val label: String) {
+    LOW(2, "Low"),
+    MEDIUM(4, "Medium"),
+    HIGH(8, "High")
+}
+
 class AudioPlayer {
+    companion object {
+        private const val TAG = "AudioPlayer"
+    }
+
     private var track: AudioTrack? = null
     private var sampleRate = 44100
 
+    @Volatile var volume: Float = 1.0f
+        set(value) {
+            field = value.coerceIn(0f, 1f)
+            track?.setVolume(field)
+        }
+
+    @Volatile var latency: AudioLatency = AudioLatency.MEDIUM
+
     fun start(sampleRate: Int) {
         this.sampleRate = sampleRate
-        val bufSize = AudioTrack.getMinBufferSize(
+        val minBuf = AudioTrack.getMinBufferSize(
             sampleRate,
             AudioFormat.CHANNEL_OUT_STEREO,
             AudioFormat.ENCODING_PCM_16BIT
-        ).coerceAtLeast(4096)
+        )
+        val bufSize = (minBuf * latency.multiplier).coerceAtLeast(minBuf * 2)
 
         track = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_GAME)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                     .build()
             )
             .setAudioFormat(
@@ -36,14 +52,25 @@ class AudioPlayer {
             )
             .setBufferSizeInBytes(bufSize)
             .setTransferMode(AudioTrack.MODE_STREAM)
+            .setPerformanceMode(
+                if (latency == AudioLatency.LOW) AudioTrack.PERFORMANCE_MODE_LOW_LATENCY
+                else AudioTrack.PERFORMANCE_MODE_NONE
+            )
             .build()
 
+        track?.setVolume(volume)
         track?.play()
-        Log.i("AudioPlayer", "Started: ${sampleRate}Hz, buf=$bufSize")
+        Log.i(TAG, "Started: ${sampleRate}Hz, buf=$bufSize (${latency.label} latency), vol=$volume")
     }
 
     fun writeSamples(samples: ShortArray) {
         track?.write(samples, 0, samples.size)
+    }
+
+    fun restart() {
+        val rate = sampleRate
+        stop()
+        start(rate)
     }
 
     fun stop() {

@@ -1,6 +1,8 @@
 package com.vortex.emulator.emulation
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +18,7 @@ import javax.inject.Singleton
 /**
  * Downloads pre-built libretro core .so files.
  * Cores are stored in the app's internal files/cores/ directory.
+ * Works offline if cores are already cached.
  */
 @Singleton
 class CoreDownloader @Inject constructor(
@@ -36,18 +39,55 @@ class CoreDownloader @Inject constructor(
     val saveDir: String
         get() = File(context.filesDir, "saves").also { it.mkdirs() }.absolutePath
 
+    /** Check if the device has an active network connection. */
+    fun isNetworkAvailable(): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(network) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    /** Return all cached core library names. */
+    fun getCachedCores(): List<String> {
+        return coresDir.listFiles()
+            ?.filter { it.extension == "so" && it.length() > 0 }
+            ?.map { it.name.removeSuffix("_libretro_android.so") }
+            ?: emptyList()
+    }
+
+    /** Get total size of cached cores in bytes. */
+    fun getCacheSize(): Long {
+        return coresDir.listFiles()?.sumOf { it.length() } ?: 0L
+    }
+
+    /** Delete all cached cores. */
+    fun clearCache() {
+        coresDir.listFiles()?.forEach { it.delete() }
+    }
+
     /**
      * Get the path to a core .so file, downloading it if necessary.
      * [libraryName] is the core library name without prefix/suffix (e.g. "fceumm").
-     * Retries up to 2 times on failure. Returns the path or null.
+     * Returns the path, or null with a reason accessible via [lastError].
      */
+    var lastError: String? = null; private set
+
     suspend fun ensureCore(libraryName: String): String? = withContext(Dispatchers.IO) {
+        lastError = null
         val soName = "${libraryName}_libretro_android.so"
         val localFile = File(coresDir, soName)
 
+        // Return cached core immediately (works offline)
         if (localFile.exists() && localFile.length() > 0) {
             Log.i(TAG, "Core already cached: $soName")
             return@withContext localFile.absolutePath
+        }
+
+        // Core not cached — check network
+        if (!isNetworkAvailable()) {
+            lastError = "offline"
+            Log.w(TAG, "Core '$libraryName' not cached and device is offline")
+            return@withContext null
         }
 
         // Determine ABI
@@ -70,6 +110,7 @@ class CoreDownloader @Inject constructor(
             if (result != null) return@withContext result
         }
 
+        lastError = "download_failed"
         Log.e(TAG, "All download attempts failed for $libraryName")
         null
     }
@@ -137,5 +178,32 @@ class CoreDownloader @Inject constructor(
     fun deleteCore(libraryName: String) {
         val soName = "${libraryName}_libretro_android.so"
         File(coresDir, soName).delete()
+    }
+
+    /**
+     * Download multiple cores sequentially.
+     * [onProgress] reports (completedCount, totalCount, currentCoreName).
+     * Returns the number of successfully downloaded cores.
+     */
+    suspend fun downloadAllCores(
+        libraryNames: List<String>,
+        onProgress: (completed: Int, total: Int, current: String) -> Unit
+    ): Int = withContext(Dispatchers.IO) {
+        var successCount = 0
+        val total = libraryNames.size
+        for ((index, name) in libraryNames.withIndex()) {
+            onProgress(index, total, name)
+            val result = ensureCore(name)
+            if (result != null) successCount++
+        }
+        onProgress(total, total, "")
+        successCount
+    }
+
+    /** Return number of cached core files. */
+    fun getCachedCoreCount(): Int {
+        return coresDir.listFiles()
+            ?.count { it.extension == "so" && it.length() > 0 }
+            ?: 0
     }
 }

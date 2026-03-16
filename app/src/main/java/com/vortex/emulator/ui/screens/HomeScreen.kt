@@ -1,6 +1,11 @@
 package com.vortex.emulator.ui.screens
 
+import android.content.Intent
 import android.content.res.Configuration
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -24,6 +29,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -46,18 +52,55 @@ fun HomeScreen(
     val gameCount by viewModel.gameCount.collectAsState()
     val chipsetTier by viewModel.chipsetTier.collectAsState()
     val coreCount by viewModel.coreCount.collectAsState()
+    val installedCoreCount by viewModel.installedCoreCount.collectAsState()
     val multiplayerCoreCount by viewModel.multiplayerReadyCoreCount.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
     val scanFilesScanned by viewModel.scanFilesScanned.collectAsState()
+    val isOffline = viewModel.isOffline()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val context = LocalContext.current
+
+    // MANAGE_EXTERNAL_STORAGE permission state
+    var hasFileAccess by remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
+        )
+    }
+    var launchFolderPickerAfterPermission by remember { mutableStateOf(false) }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         uri?.let { viewModel.scanDirectory(it) }
+    }
+
+    val manageStorageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        hasFileAccess = Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
+                Environment.isExternalStorageManager()
+        if (hasFileAccess && launchFolderPickerAfterPermission) {
+            launchFolderPickerAfterPermission = false
+            folderPickerLauncher.launch(null)
+        }
+    }
+
+    // Helper to launch scan, requesting file access first if needed
+    val launchScan: () -> Unit = {
+        if (isScanning) { /* already scanning */ }
+        else if (hasFileAccess) {
+            folderPickerLauncher.launch(null)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            launchFolderPickerAfterPermission = true
+            val intent = Intent(
+                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                Uri.parse("package:${context.packageName}")
+            )
+            manageStorageLauncher.launch(intent)
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -164,6 +207,46 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Offline banner
+        if (isOffline) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = VortexOrange.copy(alpha = 0.12f)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.WifiOff,
+                        contentDescription = null,
+                        tint = VortexOrange,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Offline Mode",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = VortexOrange
+                        )
+                        Text(
+                            text = "$installedCoreCount of $coreCount cores ready • Games with downloaded cores are playable",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = VortexOrange.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
         if (compactLayout) {
             Column(
                 modifier = Modifier
@@ -180,9 +263,9 @@ fun HomeScreen(
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
-                        icon = Icons.Filled.Memory,
-                        value = "$coreCount",
-                        label = "Cores",
+                        icon = if (installedCoreCount == coreCount) Icons.Filled.CloudDone else Icons.Filled.CloudDownload,
+                        value = "$installedCoreCount/$coreCount",
+                        label = "Offline",
                         gradientColors = listOf(VortexPurple.copy(alpha = 0.15f), VortexPurple.copy(alpha = 0.05f)),
                         modifier = Modifier.weight(1f)
                     )
@@ -219,9 +302,9 @@ fun HomeScreen(
                     modifier = Modifier.weight(1f)
                 )
                 StatCard(
-                    icon = Icons.Filled.Memory,
-                    value = "$coreCount",
-                    label = "Cores",
+                    icon = if (installedCoreCount == coreCount) Icons.Filled.CloudDone else Icons.Filled.CloudDownload,
+                    value = "$installedCoreCount/$coreCount",
+                    label = "Offline",
                     gradientColors = listOf(VortexPurple.copy(alpha = 0.15f), VortexPurple.copy(alpha = 0.05f)),
                     modifier = Modifier.weight(1f)
                 )
@@ -296,7 +379,7 @@ fun HomeScreen(
                         title = if (isScanning) "Scanning… $scanFilesScanned files" else "Scan for ROMs",
                         description = "Select a folder to find game files",
                         accentColor = VortexCyan,
-                        onClick = { if (!isScanning) folderPickerLauncher.launch(null) },
+                        onClick = { launchScan() },
                         modifier = Modifier.weight(1f)
                     )
                     QuickActionCard(
@@ -337,7 +420,7 @@ fun HomeScreen(
                 title = if (isScanning) "Scanning… $scanFilesScanned files" else "Scan for ROMs",
                 description = "Select a folder to find game files",
                 accentColor = VortexCyan,
-                onClick = { if (!isScanning) folderPickerLauncher.launch(null) }
+                onClick = { launchScan() }
             )
             QuickActionCard(
                 icon = Icons.Filled.Download,

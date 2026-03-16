@@ -25,6 +25,12 @@ interface GameDao {
     @Query("SELECT * FROM games WHERE title LIKE '%' || :query || '%' AND platform = :platform ORDER BY title ASC")
     fun searchGamesByPlatform(query: String, platform: Platform): Flow<List<Game>>
 
+    @Query("SELECT * FROM games WHERE title LIKE '%' || :query || '%'")
+    suspend fun searchGamesOnce(query: String): List<Game>
+
+    @Query("SELECT * FROM games WHERE title LIKE '%' || :query || '%' AND platform = :platform ORDER BY title ASC")
+    suspend fun searchGamesByPlatformOnce(query: String, platform: Platform): List<Game>
+
     @Query("SELECT * FROM games WHERE id = :id")
     suspend fun getGameById(id: Long): Game?
 

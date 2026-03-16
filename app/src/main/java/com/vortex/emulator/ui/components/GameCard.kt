@@ -1,7 +1,8 @@
 package com.vortex.emulator.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -24,10 +25,12 @@ import com.vortex.emulator.core.Platform
 import com.vortex.emulator.game.Game
 import com.vortex.emulator.ui.theme.*
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GameCard(
     game: Game,
     onClick: () -> Unit,
+    onLongPress: (() -> Unit)? = null,
     onFavoriteToggle: (() -> Unit)? = null,
     cardWidth: Dp? = 160.dp,
     modifier: Modifier = Modifier
@@ -38,7 +41,10 @@ fun GameCard(
         modifier = Modifier
             .then(if (cardWidth != null) Modifier.width(cardWidth) else Modifier)
             .then(modifier)
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongPress
+            ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color.Transparent
@@ -156,10 +162,12 @@ fun GameCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GameListItem(
     game: Game,
     onClick: () -> Unit,
+    onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val platformColor = game.platform.toColor()
@@ -167,7 +175,10 @@ fun GameListItem(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongPress
+            ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer

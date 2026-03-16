@@ -2,8 +2,12 @@ package com.vortex.emulator.ui.screens
 
 import android.app.Activity
 import android.content.Intent
+import android.os.Build
+import android.view.View
+import android.view.WindowInsetsController
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -44,7 +48,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import com.vortex.emulator.emulation.AudioLatency
+import com.vortex.emulator.emulation.EmulationEngine
 import com.vortex.emulator.emulation.VortexNative
+import com.vortex.emulator.core.ControllerLayout
+import com.vortex.emulator.core.FaceButtonStyle
+import com.vortex.emulator.core.defaultControllerLayout
 import com.vortex.emulator.ui.theme.*
 import com.vortex.emulator.ui.viewmodel.EmulationState
 import com.vortex.emulator.ui.viewmodel.EmulationViewModel
@@ -70,6 +79,8 @@ fun EmulationScreen(
     val fastForwardEnabled by viewModel.fastForwardEnabled.collectAsState()
     val rewindEnabled by viewModel.rewindEnabled.collectAsState()
     val audioEnabled by viewModel.audioEnabled.collectAsState()
+    val audioVolume by viewModel.audioVolume.collectAsState()
+    val audioLatency by viewModel.audioLatency.collectAsState()
     val quickSaveSlot by viewModel.quickSaveSlot.collectAsState()
 
     var showControls by remember { mutableStateOf(true) }
@@ -78,7 +89,19 @@ fun EmulationScreen(
     var showFps by remember { mutableStateOf(true) }
     var showSaveSlotPicker by remember { mutableStateOf(false) }
     var showLocalMultiplayer by remember { mutableStateOf(false) }
+    val multiplayerLocalIndex by viewModel.localPlayerIndex.collectAsState()
     var activePlayer by remember { mutableIntStateOf(0) } // 0 = P1, 1 = P2
+
+    // In multiplayer, default the active player to the local player index
+    LaunchedEffect(multiplayerLocalIndex) {
+        if (viewModel.isMultiplayerActive) {
+            activePlayer = multiplayerLocalIndex
+        }
+    }
+
+    // Gamepad detection — hide on-screen controls when physical controller is connected
+    val gamepadConnected = viewModel.isGamepadConnected
+    val effectiveShowControls = showControls && !gamepadConnected
 
     // SAF launchers for save state import/export
     val exportStateLauncher = rememberLauncherForActivityResult(
@@ -97,10 +120,47 @@ fun EmulationScreen(
         if (uri != null) viewModel.setCustomSaveDirectory(uri)
     }
 
+    // ── Immersive mode: hide status bar + navigation bar ──
+    val context = LocalContext.current
+    DisposableEffect(Unit) {
+        val activity = context as? Activity
+        val window = activity?.window
+        val decorView = window?.decorView
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val controller = window?.insetsController
+            controller?.hide(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars())
+            controller?.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        } else {
+            @Suppress("DEPRECATION")
+            decorView?.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    or View.SYSTEM_UI_FLAG_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            )
+        }
+        onDispose {
+            // Restore system bars when leaving emulation
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window?.insetsController?.show(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars())
+            } else {
+                @Suppress("DEPRECATION")
+                decorView?.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+            }
+        }
+    }
+
     val gameTitle = game?.title ?: "Loading…"
     val selectedCore by viewModel.selectedCore.collectAsState()
     val coreName = selectedCore?.displayName ?: "No core"
     val isPaused = emulationState == EmulationState.PAUSED
+
+    // Derive controller layout from the game's platform
+    val controllerLayout = remember(game?.platform) {
+        game?.platform?.defaultControllerLayout() ?: com.vortex.emulator.core.Platform.NES.defaultControllerLayout()
+    }
 
     // Loading state
     if (emulationState == EmulationState.LOADING) {
@@ -184,6 +244,13 @@ fun EmulationScreen(
                             filterQuality = FilterQuality.Low
                         )
                     }
+                    // Touch overlay for NDS/3DS
+                    if (controllerLayout.showTouchOverlay) {
+                        TouchScreenOverlay(
+                            engine = viewModel.engine,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                     // Pause overlay
                     if (isPaused) {
                         Box(
@@ -244,83 +311,52 @@ fun EmulationScreen(
                     }
                 }
 
-                // Controls area
-                if (showControls) {
+                // Controls area (hidden when physical gamepad is connected)
+                if (effectiveShowControls) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(0.50f)
                             .background(Color.Black)
                     ) {
-                        // Shoulder buttons — top of controls area
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .align(Alignment.TopCenter)
-                                .padding(top = 4.dp, start = 16.dp, end = 16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        LayoutAwareControls(
+                            layout = controllerLayout,
+                            engine = viewModel.engine,
+                            activePlayer = activePlayer,
+                            modifier = Modifier.fillMaxSize(),
+                            isPortrait = true
+                        )
+                    }
+                } else if (gamepadConnected) {
+                    // When gamepad is connected, give game surface more room
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(0.50f)
+                            .background(Color.Black),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color.Black.copy(alpha = 0.7f)
                         ) {
-                            ShoulderButton(
-                                label = "L",
-                                onPress = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_L, true) },
-                                onRelease = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_L, false) }
-                            )
-                            ShoulderButton(
-                                label = "R",
-                                onPress = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_R, true) },
-                                onRelease = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_R, false) }
-                            )
-                        }
-
-                        // D-Pad — left side
-                        DPad(
-                            onButtonPress = { id -> viewModel.engine.setButton(activePlayer, id, true) },
-                            onButtonRelease = { id -> viewModel.engine.setButton(activePlayer, id, false) },
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(start = 14.dp, bottom = 56.dp),
-                            size = 130.dp
-                        )
-
-                        // Analog stick — below D-Pad area, left-center
-                        AnalogStick(
-                            onAxisChanged = { x, y ->
-                                viewModel.engine.setAnalog(activePlayer, 0, 0, x)
-                                viewModel.engine.setAnalog(activePlayer, 0, 1, y)
-                            },
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(start = 140.dp, bottom = 70.dp),
-                            size = 70.dp
-                        )
-
-                        // Action buttons — right side
-                        ActionButtons(
-                            onButtonPress = { id -> viewModel.engine.setButton(activePlayer, id, true) },
-                            onButtonRelease = { id -> viewModel.engine.setButton(activePlayer, id, false) },
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = 14.dp, bottom = 56.dp),
-                            size = 120.dp
-                        )
-
-                        // Start / Select — bottom center
-                        Row(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(bottom = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            SmallControlButton(
-                                label = "SELECT",
-                                onPress = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_SELECT, true) },
-                                onRelease = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_SELECT, false) }
-                            )
-                            SmallControlButton(
-                                label = "START",
-                                onPress = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_START, true) },
-                                onRelease = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_START, false) }
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.SportsEsports,
+                                    contentDescription = null,
+                                    tint = VortexGreen,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = viewModel.gamepadName ?: "Controller",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = VortexGreen
+                                )
+                            }
                         }
                     }
                 }
@@ -341,6 +377,13 @@ fun EmulationScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit,
                         filterQuality = FilterQuality.Low
+                    )
+                }
+                // Touch overlay for NDS/3DS
+                if (controllerLayout.showTouchOverlay) {
+                    TouchScreenOverlay(
+                        engine = viewModel.engine,
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
                 if (isPaused) {
@@ -402,75 +445,43 @@ fun EmulationScreen(
                 }
             }
 
-            // On-screen controls (landscape)
-            if (showControls) {
-                // Shoulder buttons — just below the top bar
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.TopCenter)
-                        .padding(top = 84.dp, start = 20.dp, end = 20.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    ShoulderButton(
-                        label = "L",
-                        onPress = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_L, true) },
-                        onRelease = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_L, false) }
-                    )
-                    ShoulderButton(
-                        label = "R",
-                        onPress = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_R, true) },
-                        onRelease = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_R, false) }
-                    )
-                }
-
-                // D-Pad — bottom-left
-                DPad(
-                    onButtonPress = { id -> viewModel.engine.setButton(activePlayer, id, true) },
-                    onButtonRelease = { id -> viewModel.engine.setButton(activePlayer, id, false) },
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = 24.dp, bottom = 50.dp)
+            // On-screen controls (landscape — hidden when physical gamepad connected)
+            if (effectiveShowControls) {
+                LayoutAwareControls(
+                    layout = controllerLayout,
+                    engine = viewModel.engine,
+                    activePlayer = activePlayer,
+                    modifier = Modifier.fillMaxSize(),
+                    isPortrait = false
                 )
+            }
 
-                // Analog stick — right of D-Pad
-                AnalogStick(
-                    onAxisChanged = { x, y ->
-                        viewModel.engine.setAnalog(activePlayer, 0, 0, x)
-                        viewModel.engine.setAnalog(activePlayer, 0, 1, y)
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = 175.dp, bottom = 20.dp),
-                    size = 80.dp
-                )
-
-                // Action buttons — bottom-right
-                ActionButtons(
-                    onButtonPress = { id -> viewModel.engine.setButton(activePlayer, id, true) },
-                    onButtonRelease = { id -> viewModel.engine.setButton(activePlayer, id, false) },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 24.dp, bottom = 50.dp)
-                )
-
-                // Start / Select — bottom center
-                Row(
+            // Gamepad connected indicator (landscape)
+            if (gamepadConnected) {
+                Surface(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(20.dp)
+                        .padding(bottom = 12.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color.Black.copy(alpha = 0.6f)
                 ) {
-                    SmallControlButton(
-                        label = "SELECT",
-                        onPress = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_SELECT, true) },
-                        onRelease = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_SELECT, false) }
-                    )
-                    SmallControlButton(
-                        label = "START",
-                        onPress = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_START, true) },
-                        onRelease = { viewModel.engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_START, false) }
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.SportsEsports,
+                            contentDescription = null,
+                            tint = VortexGreen,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = viewModel.gamepadName ?: "Controller",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = VortexGreen
+                        )
+                    }
                 }
             }
         }
@@ -623,13 +634,42 @@ fun EmulationScreen(
                     ) {
                         viewModel.toggleFastForward()
                     }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // ── Audio Settings ──
+                    Text(
+                        text = "AUDIO",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = VortexCyan.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
+                    )
                     QuickMenuToggleItem(
-                        icon = Icons.Filled.VolumeUp,
+                        icon = if (audioEnabled) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
                         title = "Audio",
                         enabled = audioEnabled
                     ) {
                         viewModel.toggleAudio()
                     }
+                    // Volume slider
+                    QuickMenuSliderItem(
+                        icon = Icons.Filled.VolumeDown,
+                        title = "Volume",
+                        value = audioVolume,
+                        onValueChange = { viewModel.setAudioVolume(it) },
+                        valueLabel = "${(audioVolume * 100).roundToInt()}%",
+                        enabled = audioEnabled
+                    )
+                    // Latency selector
+                    QuickMenuSelectorItem(
+                        icon = Icons.Filled.Speed,
+                        title = "Latency",
+                        options = AudioLatency.entries.map { it.label },
+                        selectedIndex = AudioLatency.entries.indexOf(audioLatency),
+                        onSelect = { viewModel.setAudioLatency(AudioLatency.entries[it]) },
+                        enabled = audioEnabled
+                    )
 
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -1248,5 +1288,557 @@ fun QuickMenuToggleItem(
                 )
             )
         }
+    }
+}
+
+@Composable
+fun QuickMenuSliderItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueLabel: String,
+    enabled: Boolean = true
+) {
+    val alpha = if (enabled) 1f else 0.4f
+    Surface(
+        color = Color.Transparent,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .alpha(alpha)
+                .padding(vertical = 8.dp, horizontal = 8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = VortexCyan,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = valueLabel,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = VortexCyan
+                )
+            }
+            Slider(
+                value = value,
+                onValueChange = onValueChange,
+                enabled = enabled,
+                modifier = Modifier.fillMaxWidth(),
+                colors = SliderDefaults.colors(
+                    thumbColor = VortexCyan,
+                    activeTrackColor = VortexCyan,
+                    inactiveTrackColor = VortexCyan.copy(alpha = 0.2f)
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun QuickMenuSelectorItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    enabled: Boolean = true
+) {
+    val alpha = if (enabled) 1f else 0.4f
+    Surface(
+        color = Color.Transparent,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .alpha(alpha)
+                .padding(vertical = 12.dp, horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = VortexCyan,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                options.forEachIndexed { index, label ->
+                    val isSelected = index == selectedIndex
+                    Surface(
+                        onClick = { if (enabled) onSelect(index) },
+                        color = if (isSelected) VortexCyan else Color.Transparent,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.border(
+                            width = 1.dp,
+                            color = if (isSelected) VortexCyan else VortexCyan.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isSelected) Color.Black else VortexCyan.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Touch Screen Overlay — captures touch events for NDS/3DS touch screens
+// ════════════════════════════════════════════════════════════════════════
+//
+// NDS (melonDS) and 3DS (Citra) render both screens stacked vertically.
+// The touch screen is the BOTTOM half of the frame buffer.
+// Touch coordinates are mapped from screen-space to libretro pointer range:
+//   X: [-0x7FFF .. 0x7FFF]  (left to right)
+//   Y: [-0x7FFF .. 0x7FFF]  (top to bottom, but only over the bottom screen)
+// Touches on the top screen half are ignored.
+
+@Composable
+private fun TouchScreenOverlay(
+    engine: EmulationEngine,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+
+                    val w = size.width.toFloat()
+                    val h = size.height.toFloat()
+
+                    fun mapToPointer(x: Float, y: Float) {
+                        // Normalise to 0..1 over the full display area
+                        val nx = (x / w).coerceIn(0f, 1f)
+                        val ny = (y / h).coerceIn(0f, 1f)
+
+                        // Only respond to touches on the bottom half (touch screen)
+                        if (ny < 0.5f) {
+                            engine.setPointer(0, 0, false)
+                            return
+                        }
+
+                        // Map bottom-half Y (0.5..1.0) to full libretro range (-0x7FFF..0x7FFF)
+                        val touchY = ((ny - 0.5f) / 0.5f)
+                        val px = ((nx * 2f - 1f) * 0x7FFF).toInt().coerceIn(-0x7FFF, 0x7FFF)
+                        val py = ((touchY * 2f - 1f) * 0x7FFF).toInt().coerceIn(-0x7FFF, 0x7FFF)
+                        engine.setPointer(px, py, true)
+                    }
+
+                    mapToPointer(down.position.x, down.position.y)
+
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull() ?: break
+                        if (!change.pressed) break
+                        change.consume()
+                        mapToPointer(change.position.x, change.position.y)
+                    }
+                    // Release touch when finger lifts
+                    engine.setPointer(0, 0, false)
+                }
+            }
+    )
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Layout-Aware Controls — adapts on-screen buttons to the platform
+// ════════════════════════════════════════════════════════════════════════
+
+@Composable
+fun LayoutAwareControls(
+    layout: ControllerLayout,
+    engine: EmulationEngine,
+    activePlayer: Int,
+    modifier: Modifier = Modifier,
+    isPortrait: Boolean
+) {
+    val topPad = if (isPortrait) 4.dp else 84.dp
+    val botPad = if (isPortrait) 56.dp else 50.dp
+    val sidePad = if (isPortrait) 14.dp else 24.dp
+    val midBotPad = if (isPortrait) 16.dp else 14.dp
+    val dpadSize = if (isPortrait) 130.dp else 148.dp
+    val actionSize = if (isPortrait) 120.dp else 140.dp
+    val analogSize = if (isPortrait) 70.dp else 80.dp
+
+    Box(modifier = modifier) {
+        // ── Shoulder buttons row ────────────────────────────────
+        if (layout.showShoulderL || layout.showShoulderR ||
+            layout.showShoulderL2 || layout.showShoulderR2 || layout.showZTrigger
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(top = topPad, start = sidePad + 2.dp, end = sidePad + 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Left shoulder cluster
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (layout.showShoulderL2) {
+                        ShoulderButton(
+                            label = "L2",
+                            onPress = { engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_L2, true) },
+                            onRelease = { engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_L2, false) }
+                        )
+                    }
+                    if (layout.showShoulderL) {
+                        ShoulderButton(
+                            label = "L",
+                            onPress = { engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_L, true) },
+                            onRelease = { engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_L, false) }
+                        )
+                    }
+                    if (layout.showZTrigger) {
+                        ShoulderButton(
+                            label = "Z",
+                            onPress = { engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_L2, true) },
+                            onRelease = { engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_L2, false) }
+                        )
+                    }
+                }
+                // Right shoulder cluster
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (layout.showShoulderR) {
+                        ShoulderButton(
+                            label = "R",
+                            onPress = { engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_R, true) },
+                            onRelease = { engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_R, false) }
+                        )
+                    }
+                    if (layout.showShoulderR2) {
+                        ShoulderButton(
+                            label = "R2",
+                            onPress = { engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_R2, true) },
+                            onRelease = { engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_R2, false) }
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── D-Pad — bottom-left ─────────────────────────────────
+        if (layout.showDpad) {
+            DPad(
+                onButtonPress = { id -> engine.setButton(activePlayer, id, true) },
+                onButtonRelease = { id -> engine.setButton(activePlayer, id, false) },
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = sidePad, bottom = botPad),
+                size = dpadSize
+            )
+        }
+
+        // ── Left analog stick (below/beside D-Pad) ─────────────
+        if (layout.showAnalogLeft) {
+            AnalogStick(
+                onAxisChanged = { x, y ->
+                    engine.setAnalog(activePlayer, 0, 0, x)
+                    engine.setAnalog(activePlayer, 0, 1, y)
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(
+                        start = if (isPortrait) 140.dp else 175.dp,
+                        bottom = if (isPortrait) 70.dp else 20.dp
+                    ),
+                size = analogSize
+            )
+        }
+
+        // ── Right analog stick (below/beside action buttons) ────
+        if (layout.showAnalogRight) {
+            AnalogStick(
+                onAxisChanged = { x, y ->
+                    engine.setAnalog(activePlayer, 1, 0, x)
+                    engine.setAnalog(activePlayer, 1, 1, y)
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(
+                        end = if (isPortrait) 130.dp else 175.dp,
+                        bottom = if (isPortrait) 70.dp else 20.dp
+                    ),
+                size = analogSize
+            )
+        }
+
+        // ── Face buttons — changes per platform ─────────────────
+        when (layout.faceButtons) {
+            FaceButtonStyle.AB_ONLY -> {
+                ABButtons(
+                    onButtonPress = { id -> engine.setButton(activePlayer, id, true) },
+                    onButtonRelease = { id -> engine.setButton(activePlayer, id, false) },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = sidePad, bottom = botPad),
+                    size = actionSize
+                )
+            }
+            FaceButtonStyle.PSX_SYMBOLS -> {
+                PSXButtons(
+                    onButtonPress = { id -> engine.setButton(activePlayer, id, true) },
+                    onButtonRelease = { id -> engine.setButton(activePlayer, id, false) },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = sidePad, bottom = botPad),
+                    size = actionSize
+                )
+            }
+            FaceButtonStyle.SIX_BUTTON -> {
+                SixButtonCluster(
+                    onButtonPress = { id -> engine.setButton(activePlayer, id, true) },
+                    onButtonRelease = { id -> engine.setButton(activePlayer, id, false) },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = sidePad, bottom = botPad),
+                    size = actionSize
+                )
+            }
+            FaceButtonStyle.GAMECUBE -> {
+                GameCubeButtons(
+                    onButtonPress = { id -> engine.setButton(activePlayer, id, true) },
+                    onButtonRelease = { id -> engine.setButton(activePlayer, id, false) },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = sidePad, bottom = botPad),
+                    size = actionSize
+                )
+            }
+            FaceButtonStyle.ABXY -> {
+                ActionButtons(
+                    onButtonPress = { id -> engine.setButton(activePlayer, id, true) },
+                    onButtonRelease = { id -> engine.setButton(activePlayer, id, false) },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = sidePad, bottom = botPad),
+                    size = actionSize
+                )
+            }
+        }
+
+        // ── Start / Select — bottom center ──────────────────────
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = midBotPad),
+            horizontalArrangement = Arrangement.spacedBy(if (isPortrait) 16.dp else 20.dp)
+        ) {
+            if (layout.showSelect) {
+                SmallControlButton(
+                    label = "SELECT",
+                    onPress = { engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_SELECT, true) },
+                    onRelease = { engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_SELECT, false) }
+                )
+            }
+            if (layout.showStart) {
+                SmallControlButton(
+                    label = "START",
+                    onPress = { engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_START, true) },
+                    onRelease = { engine.setButton(activePlayer, VortexNative.RETRO_DEVICE_ID_JOYPAD_START, false) }
+                )
+            }
+        }
+    }
+}
+
+// ── AB-Only Buttons (NES, GBA, GBC) ────────────────────────────────
+
+@Composable
+fun ABButtons(
+    onButtonPress: (Int) -> Unit = {},
+    onButtonRelease: (Int) -> Unit = {},
+    modifier: Modifier = Modifier,
+    size: Dp = 120.dp
+) {
+    val btnDiam = size * 0.42f
+    Box(modifier = modifier.size(size)) {
+        ActionButton(
+            label = "A", color = Color.Transparent, textColor = VortexCyan,
+            modifier = Modifier.align(Alignment.CenterEnd), diameter = btnDiam,
+            onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_A) },
+            onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_A) }
+        )
+        ActionButton(
+            label = "B", color = Color.Transparent, textColor = VortexMagenta,
+            modifier = Modifier.align(Alignment.CenterStart), diameter = btnDiam,
+            onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_B) },
+            onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_B) }
+        )
+    }
+}
+
+// ── PSX Symbol Buttons (Cross/Circle/Square/Triangle) ──────────────
+
+@Composable
+fun PSXButtons(
+    onButtonPress: (Int) -> Unit = {},
+    onButtonRelease: (Int) -> Unit = {},
+    modifier: Modifier = Modifier,
+    size: Dp = 140.dp
+) {
+    val btnDiam = size * 0.36f
+    Box(modifier = modifier.size(size)) {
+        // Circle (right) → maps to A
+        ActionButton(
+            label = "○", color = Color.Transparent, textColor = VortexRed,
+            modifier = Modifier.align(Alignment.CenterEnd), diameter = btnDiam,
+            onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_A) },
+            onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_A) }
+        )
+        // Cross (bottom) → maps to B
+        ActionButton(
+            label = "✕", color = Color.Transparent, textColor = VortexCyan,
+            modifier = Modifier.align(Alignment.BottomCenter), diameter = btnDiam,
+            onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_B) },
+            onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_B) }
+        )
+        // Triangle (top) → maps to X
+        ActionButton(
+            label = "△", color = Color.Transparent, textColor = VortexGreen,
+            modifier = Modifier.align(Alignment.TopCenter), diameter = btnDiam,
+            onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_X) },
+            onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_X) }
+        )
+        // Square (left) → maps to Y
+        ActionButton(
+            label = "□", color = Color.Transparent, textColor = VortexMagenta,
+            modifier = Modifier.align(Alignment.CenterStart), diameter = btnDiam,
+            onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_Y) },
+            onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_Y) }
+        )
+    }
+}
+
+// ── 6-Button Cluster (Genesis, Saturn, Arcade) ─────────────────────
+
+@Composable
+fun SixButtonCluster(
+    onButtonPress: (Int) -> Unit = {},
+    onButtonRelease: (Int) -> Unit = {},
+    modifier: Modifier = Modifier,
+    size: Dp = 160.dp
+) {
+    // Two rows of 3 buttons:
+    // Top row:  X (L) · Y (M) · R (shoulder mapped to face)
+    // Bottom:   A      · B     · C (X in libretro)
+    val btnDiam = size * 0.28f
+    val spacing = 4.dp
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(spacing)
+    ) {
+        // Top row: X, Y, L (mapped as extra face buttons)
+        Row(horizontalArrangement = Arrangement.spacedBy(spacing)) {
+            ActionButton(
+                label = "X", color = Color.Transparent, textColor = VortexGreen,
+                diameter = btnDiam,
+                onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_X) },
+                onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_X) }
+            )
+            ActionButton(
+                label = "Y", color = Color.Transparent, textColor = VortexOrange,
+                diameter = btnDiam,
+                onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_Y) },
+                onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_Y) }
+            )
+            ActionButton(
+                label = "Z", color = Color.Transparent, textColor = Color.White.copy(alpha = 0.7f),
+                diameter = btnDiam,
+                onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_L) },
+                onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_L) }
+            )
+        }
+        // Bottom row: A, B, C
+        Row(horizontalArrangement = Arrangement.spacedBy(spacing)) {
+            ActionButton(
+                label = "A", color = Color.Transparent, textColor = VortexCyan,
+                diameter = btnDiam,
+                onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_A) },
+                onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_A) }
+            )
+            ActionButton(
+                label = "B", color = Color.Transparent, textColor = VortexMagenta,
+                diameter = btnDiam,
+                onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_B) },
+                onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_B) }
+            )
+            ActionButton(
+                label = "C", color = Color.Transparent, textColor = VortexRed,
+                diameter = btnDiam,
+                onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_R) },
+                onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_R) }
+            )
+        }
+    }
+}
+
+// ── GameCube Buttons (big A, small B, X, Y) ────────────────────────
+
+@Composable
+fun GameCubeButtons(
+    onButtonPress: (Int) -> Unit = {},
+    onButtonRelease: (Int) -> Unit = {},
+    modifier: Modifier = Modifier,
+    size: Dp = 150.dp
+) {
+    val bigDiam = size * 0.42f
+    val smallDiam = size * 0.26f
+
+    Box(modifier = modifier.size(size)) {
+        // A — big center button
+        ActionButton(
+            label = "A", color = Color.Transparent, textColor = VortexGreen,
+            modifier = Modifier.align(Alignment.Center), diameter = bigDiam,
+            onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_A) },
+            onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_A) }
+        )
+        // B — small, bottom-left of A
+        ActionButton(
+            label = "B", color = Color.Transparent, textColor = VortexRed,
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = 4.dp), diameter = smallDiam,
+            onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_B) },
+            onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_B) }
+        )
+        // X — right of A
+        ActionButton(
+            label = "X", color = Color.Transparent, textColor = Color.White.copy(alpha = 0.8f),
+            modifier = Modifier.align(Alignment.CenterEnd), diameter = smallDiam,
+            onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_X) },
+            onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_X) }
+        )
+        // Y — top-left of A
+        ActionButton(
+            label = "Y", color = Color.Transparent, textColor = Color.White.copy(alpha = 0.8f),
+            modifier = Modifier.align(Alignment.TopStart).padding(start = 4.dp), diameter = smallDiam,
+            onPress = { onButtonPress(VortexNative.RETRO_DEVICE_ID_JOYPAD_Y) },
+            onRelease = { onButtonRelease(VortexNative.RETRO_DEVICE_ID_JOYPAD_Y) }
+        )
     }
 }
