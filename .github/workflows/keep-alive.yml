@@ -1,0 +1,12 @@
+name: Keep Lobby Alive
+
+on:
+  schedule:
+    - cron: '*/14 * * * *'
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping lobby server
+        run: curl -sf https://vortex-lobby.onrender.com/health || true
