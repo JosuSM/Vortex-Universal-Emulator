@@ -238,4 +238,85 @@ fun Platform.defaultControllerLayout(): ControllerLayout = when (this) {
         showShoulderR = true,
         showTouchOverlay = true,
     )
+
+    Platform.PCE -> ControllerLayout(
+        id = "pce",
+        displayName = "PC Engine Controller",
+        showDpad = true,
+        faceButtons = FaceButtonStyle.AB_ONLY,
+        showShoulderL = false,
+        showShoulderR = false,
+    )
+
+    Platform.ATARI2600 -> ControllerLayout(
+        id = "atari2600",
+        displayName = "Atari 2600 Joystick",
+        showDpad = true,
+        faceButtons = FaceButtonStyle.AB_ONLY,
+        showShoulderL = false,
+        showShoulderR = false,
+    )
+
+    Platform.ATARI7800 -> ControllerLayout(
+        id = "atari7800",
+        displayName = "Atari 7800 Controller",
+        showDpad = true,
+        faceButtons = FaceButtonStyle.AB_ONLY,
+        showShoulderL = false,
+        showShoulderR = false,
+    )
+
+    Platform.LYNX -> ControllerLayout(
+        id = "lynx",
+        displayName = "Atari Lynx",
+        showDpad = true,
+        faceButtons = FaceButtonStyle.AB_ONLY,
+        showShoulderL = false,
+        showShoulderR = false,
+    )
+
+    Platform.NGP -> ControllerLayout(
+        id = "ngp",
+        displayName = "Neo Geo Pocket",
+        showDpad = true,
+        faceButtons = FaceButtonStyle.AB_ONLY,
+        showShoulderL = false,
+        showShoulderR = false,
+    )
+
+    Platform.WONDERSWAN -> ControllerLayout(
+        id = "wonderswan",
+        displayName = "WonderSwan",
+        showDpad = true,
+        faceButtons = FaceButtonStyle.ABXY,
+        showShoulderL = false,
+        showShoulderR = false,
+    )
+
+    Platform.VIRTUALBOY -> ControllerLayout(
+        id = "virtualboy",
+        displayName = "Virtual Boy Controller",
+        showDpad = true,
+        faceButtons = FaceButtonStyle.AB_ONLY,
+        showShoulderL = true,
+        showShoulderR = true,
+    )
+
+    Platform.DOS -> ControllerLayout(
+        id = "dos",
+        displayName = "DOS Keyboard/Gamepad",
+        showDpad = true,
+        faceButtons = FaceButtonStyle.ABXY,
+        showShoulderL = true,
+        showShoulderR = true,
+    )
+
+    Platform.THREEDO -> ControllerLayout(
+        id = "threedo",
+        displayName = "3DO Controller",
+        showDpad = true,
+        faceButtons = FaceButtonStyle.ABXY,
+        showShoulderL = true,
+        showShoulderR = true,
+    )
 }

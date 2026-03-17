@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.1_Galaxy-00E5FF?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-2.2_Nova-00E5FF?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/Kotlin-2.1-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin"/>
@@ -28,6 +28,8 @@ Most emulators feel like developer tools. Vortex feels like a **gaming app** —
 - **Save anywhere** — 10 quick-save slots, export/import, rewind time
 - **Play together** — Internet & LAN multiplayer for up to 8 players
 - **Immersive gaming** — Full-screen emulation with hidden system bars
+- **Per-core advanced settings** — Input polling, shader precision, threaded rendering, and more
+- **Automatic standalone detection** — Detects installed emulators (PPSSPP, Dolphin, etc.) as usable cores
 
 ---
 
@@ -55,11 +57,28 @@ Most emulators feel like developer tools. Vortex feels like a **gaming app** —
 ## Features
 
 ### Emulation
-- Native C libretro frontend with JNI bridge for near-zero overhead
+- Native C/C++/Rust libretro frontends with JNI bridge for near-zero overhead
 - Vulkan & OpenGL ES rendering with resolution upscaling
 - Frame pacing for smooth 60 FPS gameplay
 - Real-time FPS counter and performance monitoring
 - Core switching per platform without restarting
+- PSP software rendering fallback for Mali GPU compatibility
+- Crash-safe GL context initialization — GPU failures don't crash the app
+
+### Per-Core Advanced Settings
+- Input Polling Mode — Normal or Early Poll for latency-sensitive games
+- Threaded Rendering toggle — avoid GPU deadlocks on certain chipsets
+- Shader Precision — Low, Medium, or High per core
+- Rewind toggle with configurable buffer size (60–600 frames)
+- Access via: long-press a game → Settings → Advanced / Compatibility
+
+### Standalone Emulator Integration
+- Automatic detection of 25+ standalone emulators (PPSSPP, Dolphin, Citra, etc.)
+- Re-detected every time you open the Home or Cores screen
+- Direct-launch via `ACTION_VIEW` intent with FileProvider support
+- Download standalone APKs directly from GitHub or Play Store
+- Libretro cores preferred by default — built-in multiplayer always works
+- Switch to standalone manually via the core picker when needed
 
 ### Controls
 - **8-direction D-Pad** with diagonal support and visual feedback
@@ -94,6 +113,8 @@ Most emulators feel like developer tools. Vortex feels like a **gaming app** —
 ### Experience
 - **Animated splash screen** — vortex rings, starfield particles, and spring-animated logo
 - **Immersive mode** — status and navigation bars hidden during emulation
+- **Centered top bar** — Pause and Menu buttons at top center, away from shoulder buttons
+- **Exit via Quick Menu** — no accidental exits; Quit Game is in the ⋮ menu
 - Material Design 3 dark theme with neon accents
 - Scrollable Quick Menu that works in landscape
 - Game library with platform badges and cover art
@@ -147,7 +168,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 | Component | Technology |
 |-----------|------------|
-| Language | Kotlin + C (native frontend) |
+| Language | Kotlin + C/C++/Rust (native frontends) |
 | UI | Jetpack Compose + Material 3 |
 | DI | Hilt |
 | Database | Room |
@@ -171,7 +192,7 @@ This project is licensed under the [MIT License](LICENSE).
 ---
 
 <p align="center">
-  <strong>Vortex v2.1 Galaxy</strong><br/>
+  <strong>Vortex v2.2 Nova</strong><br/>
   Built with Kotlin & Jetpack Compose<br/>
   Made by <a href="https://github.com/JosuSM">JosuSM</a>
 </p>

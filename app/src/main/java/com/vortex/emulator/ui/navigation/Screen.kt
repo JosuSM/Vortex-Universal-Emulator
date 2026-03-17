@@ -87,6 +87,15 @@ sealed class Screen(
         unselectedIcon = Icons.Outlined.Home
     )
 
+    data object CoreSettings : Screen(
+        route = "core_settings/{coreId}",
+        title = "Core Settings",
+        selectedIcon = Icons.Filled.Settings,
+        unselectedIcon = Icons.Outlined.Settings
+    ) {
+        fun createRoute(coreId: String) = "core_settings/$coreId"
+    }
+
     companion object {
         val bottomNavItems = listOf(Home, Library, Cores, Multiplayer, Settings)
     }

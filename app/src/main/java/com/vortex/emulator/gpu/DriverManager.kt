@@ -1,6 +1,7 @@
 package com.vortex.emulator.gpu
 
 import android.content.Context
+import android.content.SharedPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +33,8 @@ class DriverManager @Inject constructor(
     private val chipsetDetector: ChipsetDetector
 ) {
     private val driversDir = File(context.filesDir, "gpu_drivers")
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences("vortex_driver_prefs", Context.MODE_PRIVATE)
     private val _drivers = MutableStateFlow<List<DriverInfo>>(emptyList())
     val drivers: StateFlow<List<DriverInfo>> = _drivers.asStateFlow()
 
@@ -47,6 +50,7 @@ class DriverManager @Inject constructor(
         val gpu = chipsetDetector.chipsetInfo.gpuInfo
         val renderer = gpu?.renderer?.lowercase() ?: ""
 
+        val savedDriverId = prefs.getString("active_driver_id", "system_default") ?: "system_default"
         val catalog = mutableListOf(
             DriverInfo(
                 id = "system_default",
@@ -57,7 +61,18 @@ class DriverManager @Inject constructor(
                 targetGpu = "All",
                 isInstalled = true,
                 isBundled = true,
-                isActive = true
+                isActive = savedDriverId == "system_default"
+            ),
+            DriverInfo(
+                id = "gles_compat",
+                name = "OpenGL ES Compatibility",
+                version = "System",
+                vendor = "System",
+                description = "Force OpenGL ES rendering path. Better compatibility for some cores.",
+                targetGpu = "All",
+                isInstalled = true,
+                isBundled = true,
+                isActive = savedDriverId == "gles_compat"
             )
         )
 
@@ -72,7 +87,8 @@ class DriverManager @Inject constructor(
                     description = "Open-source Vulkan driver for Adreno GPUs. Often faster than stock.",
                     targetGpu = "Adreno 610+",
                     isBundled = true,
-                    downloadSizeMb = 4.2f
+                    downloadSizeMb = 4.2f,
+                    isActive = savedDriverId == "turnip_latest"
                 ),
                 DriverInfo(
                     id = "freedreno_latest",
@@ -81,7 +97,8 @@ class DriverManager @Inject constructor(
                     vendor = "Mesa",
                     description = "Open-source OpenGL driver for Adreno. Better shader compatibility.",
                     targetGpu = "Adreno 610+",
-                    downloadSizeMb = 3.8f
+                    downloadSizeMb = 3.8f,
+                    isActive = savedDriverId == "freedreno_latest"
                 )
             ))
         }
@@ -96,7 +113,8 @@ class DriverManager @Inject constructor(
                     vendor = "Mesa",
                     description = "Open-source Vulkan driver for Mali GPUs.",
                     targetGpu = "Mali-G52+",
-                    downloadSizeMb = 4.0f
+                    downloadSizeMb = 4.0f,
+                    isActive = savedDriverId == "panvk_latest"
                 ),
                 DriverInfo(
                     id = "panfrost_latest",
@@ -105,7 +123,8 @@ class DriverManager @Inject constructor(
                     vendor = "Mesa",
                     description = "Open-source OpenGL driver for Mali GPUs.",
                     targetGpu = "Mali-G52+",
-                    downloadSizeMb = 3.5f
+                    downloadSizeMb = 3.5f,
+                    isActive = savedDriverId == "panfrost_latest"
                 )
             ))
         }
@@ -120,7 +139,8 @@ class DriverManager @Inject constructor(
                     vendor = "Samsung/AMD",
                     description = "Samsung's optimized RDNA2 game driver.",
                     targetGpu = "Xclipse",
-                    downloadSizeMb = 5.0f
+                    downloadSizeMb = 5.0f,
+                    isActive = savedDriverId == "samsung_game_driver"
                 )
             )
         }
@@ -159,5 +179,10 @@ class DriverManager @Inject constructor(
             activateDriver(_drivers.value.first { it.id == "system_default" })
         }
         return true
+    }
+
+    suspend fun persistActiveDriver() {
+        val activeId = _activeDriver.value?.id ?: "system_default"
+        prefs.edit().putString("active_driver_id", activeId).apply()
     }
 }

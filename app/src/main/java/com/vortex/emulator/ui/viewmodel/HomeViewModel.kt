@@ -28,6 +28,12 @@ class HomeViewModel @Inject constructor(
     private val coreDownloader: CoreDownloader
 ) : ViewModel() {
 
+    init {
+        // Refresh installed status so standalone emulators installed
+        // while the app was in the background are detected.
+        coreManager.refreshInstalled()
+    }
+
     val recentGames: StateFlow<List<Game>> = gameDao.getRecentGames(10)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

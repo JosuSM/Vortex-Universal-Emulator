@@ -14,12 +14,25 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.vortex.emulator.emulation.FrontendBridge
+import com.vortex.emulator.emulation.FrontendType
 import com.vortex.emulator.ui.components.VortexHeader
 import com.vortex.emulator.ui.theme.*
 import com.vortex.emulator.ui.viewmodel.CoresViewModel
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
+
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface SettingsEntryPoint {
+    fun frontendBridge(): FrontendBridge
+}
 
 @Composable
 fun SettingsScreen(
@@ -27,6 +40,12 @@ fun SettingsScreen(
     onNavigateToPatcher: () -> Unit = {},
     coresViewModel: CoresViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
+    val frontendBridge = remember {
+        EntryPointAccessors.fromApplication(context.applicationContext, SettingsEntryPoint::class.java)
+            .frontendBridge()
+    }
+    var selectedFrontend by remember { mutableStateOf(frontendBridge.activeFrontend) }
     var vulkanEnabled by remember { mutableStateOf(true) }
     var rewindEnabled by remember { mutableStateOf(false) }
     var fastForwardSpeed by remember { mutableFloatStateOf(2f) }
@@ -60,31 +79,38 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Graphics Section
+        // Graphics Section (per-core)
         SettingSectionHeader(icon = Icons.Filled.Videocam, title = "Graphics")
 
-        SettingSwitch(
-            title = "Vulkan Renderer",
-            description = "Use Vulkan API for better performance (when available)",
-            checked = vulkanEnabled,
-            onCheckedChange = { vulkanEnabled = it }
-        )
-
-        SettingSlider(
-            title = "Internal Resolution",
-            description = "${resolutionMultiplier.toInt()}x Native",
-            value = resolutionMultiplier,
-            valueRange = 1f..5f,
-            steps = 3,
-            onValueChange = { resolutionMultiplier = it }
-        )
-
-        SettingSwitch(
-            title = "Bilinear Filtering",
-            description = "Smooth texture filtering for retro games",
-            checked = bilinearFiltering,
-            onCheckedChange = { bilinearFiltering = it }
-        )
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Filled.Info,
+                    contentDescription = null,
+                    tint = VortexCyan.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Graphics, resolution, backend and rendering settings are now configured per core. Long press any core in the Cores tab to access its settings.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
 
         HorizontalDivider(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -116,6 +142,73 @@ fun SettingsScreen(
             checked = autoSaveState,
             onCheckedChange = { autoSaveState = it }
         )
+
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+        )
+
+        // Frontend Engine Section (moved to per-core settings)
+        SettingSectionHeader(icon = Icons.Filled.Memory, title = "Frontend Engine")
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Global default: ${frontendBridge.activeFrontend.displayName}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Choose which native frontend runs emulation cores. " +
+                           "Each core can override this in its own settings (long press a core).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                FrontendType.entries.forEach { type ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                selectedFrontend = type
+                                frontendBridge.activeFrontend = type
+                            }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedFrontend == type,
+                            onClick = {
+                                selectedFrontend = type
+                                frontendBridge.activeFrontend = type
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = type.displayName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = type.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
 
         HorizontalDivider(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -476,13 +569,13 @@ fun SettingsScreen(
                     color = VortexCyan
                 )
                 Text(
-                    text = "Version 2.1-Galaxy",
+                    text = "Version 2.2-Nova",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "A next-generation emulator built for performance, compatibility, and style. Powered by the best open-source emulation cores.",
+                    text = "A next-generation emulator built for performance, compatibility, and style. Powered by the best open-source emulation cores with per-core advanced settings, automatic standalone emulator detection, and built-in multiplayer.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

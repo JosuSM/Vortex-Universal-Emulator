@@ -2,7 +2,8 @@ package com.vortex.emulator.core
 
 /**
  * Information about an emulation core.
- * Each core is a shared library (.so) that implements emulation for one or more platforms.
+ * A core can be either a libretro shared library (.so) or a standalone emulator
+ * app launched via Android Intent (VortexFramework standalone path).
  */
 data class CoreInfo(
     val id: String,
@@ -17,7 +18,11 @@ data class CoreInfo(
     val isBundled: Boolean = false,
     val downloadUrl: String = "",
     val downloadSizeMb: Float = 0f,
-    val features: Set<CoreFeature> = emptySet()
+    val features: Set<CoreFeature> = emptySet(),
+    /** If true, this core is launched as a standalone app via StandaloneLauncher. */
+    val isStandalone: Boolean = false,
+    /** If true, this core is Lemuroid-recommended (curated for reliability on Android). */
+    val isLemuroidDefault: Boolean = false
 )
 
 enum class CoreFeature {

@@ -64,7 +64,8 @@ class AudioPlayer {
     }
 
     fun writeSamples(samples: ShortArray) {
-        track?.write(samples, 0, samples.size)
+        // Non-blocking write to prevent emulation thread stalls on heavy cores
+        track?.write(samples, 0, samples.size, AudioTrack.WRITE_NON_BLOCKING)
     }
 
     fun restart() {

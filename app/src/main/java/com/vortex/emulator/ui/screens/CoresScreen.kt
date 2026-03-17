@@ -1,12 +1,15 @@
 package com.vortex.emulator.ui.screens
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import kotlinx.coroutines.delay
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -27,6 +30,7 @@ import com.vortex.emulator.ui.viewmodel.CoresViewModel
 
 @Composable
 fun CoresScreen(
+    onCoreSettings: (String) -> Unit = {},
     viewModel: CoresViewModel = hiltViewModel()
 ) {
     val installedCores by viewModel.installedCores.collectAsState()
@@ -37,6 +41,18 @@ fun CoresScreen(
     val batchProgress by viewModel.batchProgress.collectAsState()
     val batchCurrentCore by viewModel.batchCurrentCore.collectAsState()
     val downloadingCoreId by viewModel.downloadingCoreId.collectAsState()
+    val standaloneProgress by viewModel.standaloneProgress.collectAsState()
+    val standaloneError by viewModel.standaloneError.collectAsState()
+    val standaloneFailedLibrary by viewModel.standaloneFailedLibrary.collectAsState()
+
+    // Show standalone download errors as a dismissable banner
+    LaunchedEffect(standaloneError) {
+        // auto-clear after 12 seconds
+        if (standaloneError != null) {
+            delay(12000)
+            viewModel.clearStandaloneError()
+        }
+    }
 
     // Separate installed vs not-installed
     val installed = installedCores.filter { it.isInstalled }
@@ -90,8 +106,75 @@ fun CoresScreen(
                 }
             }
 
+            // Standalone download error banner
+            if (standaloneError != null) {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = VortexRed.copy(alpha = 0.12f)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.Error,
+                                    contentDescription = null,
+                                    tint = VortexRed,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Text(
+                                    text = standaloneError ?: "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = VortexRed,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                IconButton(
+                                    onClick = { viewModel.clearStandaloneError() },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = "Dismiss",
+                                        tint = VortexRed.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            if (standaloneFailedLibrary != null) {
+                                Button(
+                                    onClick = {
+                                        standaloneFailedLibrary?.let { viewModel.openStandaloneFallback(it) }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = VortexOrange
+                                    ),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.OpenInBrowser,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Open Download Page")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Download All / Batch progress
-            if (notInstalled.isNotEmpty() && !isOffline) {
+            if (notInstalled.any { !it.isStandalone } && !isOffline) {
                 item {
                     if (isBatchDownloading) {
                         Card(
@@ -182,8 +265,10 @@ fun CoresScreen(
                 CoreCard(
                     core = core,
                     isDownloading = downloadingCoreId == core.id,
+                    standaloneProgress = if (core.isStandalone) standaloneProgress else 0f,
                     onDownload = { viewModel.downloadCore(core) },
                     onDelete = { viewModel.deleteCore(core) },
+                    onLongPress = { onCoreSettings(core.id) },
                     isOffline = isOffline
                 )
             }
@@ -203,8 +288,10 @@ fun CoresScreen(
                     CoreCard(
                         core = core,
                         isDownloading = downloadingCoreId == core.id,
+                        standaloneProgress = if (core.isStandalone) standaloneProgress else 0f,
                         onDownload = { viewModel.downloadCore(core) },
                         onDelete = { viewModel.deleteCore(core) },
+                        onLongPress = { onCoreSettings(core.id) },
                         isOffline = isOffline
                     )
                 }
@@ -215,13 +302,15 @@ fun CoresScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun CoreCard(
     core: CoreInfo,
     isDownloading: Boolean = false,
+    standaloneProgress: Float = 0f,
     onDownload: () -> Unit = {},
     onDelete: () -> Unit = {},
+    onLongPress: () -> Unit = {},
     isOffline: Boolean = false
 ) {
     val primaryPlatform = core.supportedPlatforms.firstOrNull()
@@ -231,6 +320,10 @@ fun CoreCard(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        modifier = Modifier.combinedClickable(
+            onClick = { },
+            onLongClick = onLongPress
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -274,7 +367,56 @@ fun CoreCard(
                 }
 
                 // Status badge + action
-                if (core.isInstalled) {
+                if (core.isStandalone) {
+                    if (core.isInstalled) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = VortexGreen.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "★ Standalone",
+                                color = VortexGreen,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    } else if (isDownloading) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(28.dp),
+                                strokeWidth = 2.dp,
+                                color = VortexOrange
+                            )
+                            if (standaloneProgress > 0f) {
+                                Text(
+                                    text = "${(standaloneProgress * 100).toInt()}%",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = VortexOrange
+                                )
+                            }
+                        }
+                    } else {
+                        FilledIconButton(
+                            onClick = onDownload,
+                            enabled = !isOffline,
+                            modifier = Modifier.size(36.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = VortexOrange.copy(alpha = 0.15f),
+                                contentColor = VortexOrange,
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                            )
+                        ) {
+                            Icon(
+                                Icons.Filled.Download,
+                                contentDescription = "Download standalone APK",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                } else if (core.isInstalled) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -339,8 +481,8 @@ fun CoreCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // Size info for not-installed cores
-            if (!core.isInstalled && core.downloadSizeMb > 0) {
+            // Size info for not-installed libretro cores
+            if (!core.isInstalled && !core.isStandalone && core.downloadSizeMb > 0) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "~${String.format("%.1f", core.downloadSizeMb)} MB",
@@ -381,6 +523,25 @@ fun CoreCard(
                         )
                     }
                 }
+            }
+
+            // Long-press hint
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Icon(
+                    Icons.Filled.Settings,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    modifier = Modifier.size(12.dp)
+                )
+                Text(
+                    text = "Long press for core settings",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                )
             }
         }
     }

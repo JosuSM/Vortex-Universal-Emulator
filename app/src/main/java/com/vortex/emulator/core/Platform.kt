@@ -110,6 +110,60 @@ enum class Platform(
         abbreviation = "VITA",
         romExtensions = listOf("vpk", "mai"),
         icon = "vita"
+    ),
+    PCE(
+        displayName = "PC Engine / TurboGrafx-16",
+        abbreviation = "PCE",
+        romExtensions = listOf("pce", "sgx", "cue", "ccd", "chd"),
+        icon = "pce"
+    ),
+    ATARI2600(
+        displayName = "Atari 2600",
+        abbreviation = "2600",
+        romExtensions = listOf("a26", "bin"),
+        icon = "atari"
+    ),
+    ATARI7800(
+        displayName = "Atari 7800",
+        abbreviation = "7800",
+        romExtensions = listOf("a78", "bin"),
+        icon = "atari"
+    ),
+    LYNX(
+        displayName = "Atari Lynx",
+        abbreviation = "LYNX",
+        romExtensions = listOf("lnx"),
+        icon = "atari"
+    ),
+    NGP(
+        displayName = "Neo Geo Pocket / Color",
+        abbreviation = "NGP",
+        romExtensions = listOf("ngp", "ngc"),
+        icon = "ngp"
+    ),
+    WONDERSWAN(
+        displayName = "WonderSwan / Color",
+        abbreviation = "WS",
+        romExtensions = listOf("ws", "wsc"),
+        icon = "wonderswan"
+    ),
+    VIRTUALBOY(
+        displayName = "Virtual Boy",
+        abbreviation = "VB",
+        romExtensions = listOf("vb", "vboy"),
+        icon = "virtualboy"
+    ),
+    DOS(
+        displayName = "DOS",
+        abbreviation = "DOS",
+        romExtensions = listOf("zip", "dosz", "exe", "com", "bat"),
+        icon = "dos"
+    ),
+    THREEDO(
+        displayName = "3DO",
+        abbreviation = "3DO",
+        romExtensions = listOf("iso", "bin", "chd", "cue"),
+        icon = "threedo"
     );
 
     companion object {

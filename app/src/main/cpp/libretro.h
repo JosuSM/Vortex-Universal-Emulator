@@ -39,6 +39,8 @@ extern "C" {
 #define RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE 23
 #define RETRO_ENVIRONMENT_GET_INPUT_DEVICE_CAPABILITIES 24
 #define RETRO_ENVIRONMENT_GET_LOG_INTERFACE    27
+#define RETRO_ENVIRONMENT_GET_PERF_INTERFACE   28
+#define RETRO_ENVIRONMENT_GET_LOCATION_INTERFACE 29
 #define RETRO_ENVIRONMENT_GET_CORE_ASSETS_DIRECTORY 30
 #define RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY   31
 #define RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO   32
@@ -53,7 +55,9 @@ extern "C" {
 #define RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS 42
 #define RETRO_ENVIRONMENT_SET_HW_RENDER_CONTEXT_NEGOTIATION_INTERFACE 43
 #define RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS 44
-#define RETRO_ENVIRONMENT_SET_HW_SHARED_CONTEXT 44  /* same slot in libretro spec */
+#define RETRO_ENVIRONMENT_EXPERIMENTAL 0x10000
+#define RETRO_ENVIRONMENT_PRIVATE      0x800000
+#define RETRO_ENVIRONMENT_SET_HW_SHARED_CONTEXT (44 | RETRO_ENVIRONMENT_EXPERIMENTAL)
 #define RETRO_ENVIRONMENT_GET_VFS_INTERFACE    45
 #define RETRO_ENVIRONMENT_GET_LED_INTERFACE    46
 #define RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE 47
@@ -114,6 +118,11 @@ extern "C" {
 #define RETRO_DEVICE_ID_JOYPAD_R2      13
 #define RETRO_DEVICE_ID_JOYPAD_L3      14
 #define RETRO_DEVICE_ID_JOYPAD_R3      15
+#define RETRO_DEVICE_ID_JOYPAD_MASK   256
+
+/* ── Device type mask (strip subclass bits) ────────────────────── */
+#define RETRO_DEVICE_TYPE_SHIFT   8
+#define RETRO_DEVICE_MASK         ((1 << RETRO_DEVICE_TYPE_SHIFT) - 1)
 
 /* ── Pointer device IDs ────────────────────────────────────────── */
 #define RETRO_DEVICE_ID_POINTER_X       0
@@ -321,6 +330,36 @@ typedef bool (*retro_set_rumble_state_t)(unsigned port, unsigned effect, uint16_
 
 struct retro_rumble_interface {
     retro_set_rumble_state_t set_rumble_state;
+};
+
+/* ── Performance interface ─────────────────────────────────────── */
+typedef int64_t retro_perf_tick_t;
+typedef int64_t retro_time_t;
+
+struct retro_perf_counter {
+    const char *ident;
+    retro_perf_tick_t start;
+    retro_perf_tick_t total;
+    retro_perf_tick_t call_cnt;
+    bool registered;
+};
+
+typedef retro_time_t (*retro_perf_get_time_usec_t)(void);
+typedef retro_perf_tick_t (*retro_perf_get_counter_t)(void);
+typedef uint64_t (*retro_get_cpu_features_t)(void);
+typedef void (*retro_perf_log_t)(void);
+typedef void (*retro_perf_register_t)(struct retro_perf_counter *counter);
+typedef void (*retro_perf_start_t)(struct retro_perf_counter *counter);
+typedef void (*retro_perf_stop_t)(struct retro_perf_counter *counter);
+
+struct retro_perf_callback {
+    retro_perf_get_time_usec_t get_time_usec;
+    retro_perf_get_counter_t   get_cpu_features;
+    retro_perf_get_counter_t   get_perf_counter;
+    retro_perf_register_t      perf_register;
+    retro_perf_start_t         perf_start;
+    retro_perf_stop_t          perf_stop;
+    retro_perf_log_t           perf_log;
 };
 
 /* ── Message ───────────────────────────────────────────────────── */

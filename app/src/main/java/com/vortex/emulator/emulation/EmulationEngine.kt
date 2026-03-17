@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Environment
 import android.provider.DocumentsContract
 import android.util.Log
+import com.vortex.emulator.core.*
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,7 +19,9 @@ import javax.inject.Singleton
 @Singleton
 class EmulationEngine @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val coreDownloader: CoreDownloader
+    private val coreDownloader: CoreDownloader,
+    val frontend: FrontendBridge,
+    private val coreSettingsRepo: CoreSettingsRepository
 ) {
     companion object {
         private const val TAG = "EmulationEngine"
@@ -46,6 +49,7 @@ class EmulationEngine @Inject constructor(
     // Rewind buffer: circular list of serialized states
     private val rewindBuffer = ArrayDeque<ByteArray>(REWIND_BUFFER_SIZE)
     private var rewindActive = false
+    @Volatile var rewindBufferSize = REWIND_BUFFER_SIZE
 
     // Screenshot callback
     private var screenshotCallback: ((Bitmap) -> Unit)? = null
@@ -56,7 +60,7 @@ class EmulationEngine @Inject constructor(
     private val effectiveSaveDir: String
         get() = customSaveDir ?: coreDownloader.saveDir
 
-    suspend fun prepare(libraryName: String, romUri: String): String? = withContext(Dispatchers.IO) {
+    suspend fun prepare(libraryName: String, romUri: String, coreId: String? = null): String? = withContext(Dispatchers.IO) {
         val corePath = coreDownloader.ensureCore(libraryName)
             ?: return@withContext when (coreDownloader.lastError) {
                 "offline" -> "Core '$libraryName' is not downloaded. Connect to the internet to download it, or use an already cached core."
@@ -68,7 +72,18 @@ class EmulationEngine @Inject constructor(
 
         Log.i(TAG, "Resolved ROM path: $romPath (${File(romPath).length()} bytes)")
 
-        val result = VortexNative.loadCore(
+        // Set Vulkan display backend BEFORE loadCore if user selected Vulkan/Ashes
+        if (coreId != null) {
+            val settings = coreSettingsRepo.load(coreId)
+            val nativeBackend = when (settings.renderBackend) {
+                RenderBackend.VULKAN, RenderBackend.ASHES -> 1  // DISPLAY_VULKAN
+                else -> 0  // DISPLAY_GL
+            }
+            frontend.setRenderBackend(nativeBackend)
+            Log.i(TAG, "Display backend set to ${if (nativeBackend == 1) "Vulkan" else "GL"}")
+        }
+
+        val result = frontend.loadCore(
             corePath,
             coreDownloader.systemDir,
             effectiveSaveDir
@@ -80,7 +95,12 @@ class EmulationEngine @Inject constructor(
         // Set performance-friendly defaults for demanding cores before loading game
         applyPerformanceDefaults(libraryName)
 
-        val loaded = VortexNative.loadGame(romPath)
+        // Apply user's per-core settings BEFORE loadGame — cores read options during init
+        if (coreId != null) {
+            applyCoreSettings(coreId, libraryName)
+        }
+
+        val loaded = frontend.loadGame(romPath)
         if (!loaded) {
             // If failed, try invalidating cached ROM and re-resolve
             Log.w(TAG, "First loadGame attempt failed, invalidating ROM cache...")
@@ -88,16 +108,26 @@ class EmulationEngine @Inject constructor(
             val freshRomPath = resolveRomPath(romUri)
             if (freshRomPath != null) {
                 Log.i(TAG, "Retrying with fresh ROM: $freshRomPath (${File(freshRomPath).length()} bytes)")
-                val retryLoaded = VortexNative.loadGame(freshRomPath)
+                val retryLoaded = frontend.loadGame(freshRomPath)
                 if (retryLoaded) {
-                    Log.i(TAG, "Ready (after retry): core=$libraryName, rom=$freshRomPath, fps=${VortexNative.getFps()}")
+                    // Re-apply per-core settings after loadGame (native may overwrite some options)
+                    if (coreId != null) applyCoreSettings(coreId, libraryName)
+                    Log.i(TAG, "Ready (after retry): core=$libraryName, rom=$freshRomPath, fps=${frontend.getFps()}")
                     return@withContext null
                 }
             }
             return@withContext "Failed to load ROM. The file may be corrupted or unsupported."
         }
 
-        Log.i(TAG, "Ready: core=$libraryName, rom=$romPath, fps=${VortexNative.getFps()}")
+        // Re-apply per-core settings after loadGame — the native loadGame() hardcodes
+        // some options (e.g. mupen64plus-EnableFBEmulation=True) which may override
+        // user settings. Re-applying here ensures user choices take final precedence
+        // and cores will pick them up via GET_VARIABLE_UPDATE on next retro_run().
+        if (coreId != null) {
+            applyCoreSettings(coreId, libraryName)
+        }
+
+        Log.i(TAG, "Ready: core=$libraryName, rom=$romPath, fps=${frontend.getFps()}")
         null
     }
 
@@ -105,26 +135,367 @@ class EmulationEngine @Inject constructor(
     private fun applyPerformanceDefaults(libraryName: String) {
         when {
             libraryName.startsWith("mupen64plus") -> {
-                VortexNative.setCoreOption("mupen64plus-cpucore", "dynamic_recompiler")
-                VortexNative.setCoreOption("mupen64plus-EnableFBEmulation", "False")
-                VortexNative.setCoreOption("mupen64plus-EnableCopyColorToRDRAM", "Off")
-                VortexNative.setCoreOption("mupen64plus-EnableCopyDepthToRDRAM", "Off")
-                VortexNative.setCoreOption("mupen64plus-EnableN64DepthCompare", "False")
-                VortexNative.setCoreOption("mupen64plus-FrameDuping", "True")
-                VortexNative.setCoreOption("mupen64plus-ThreadedRenderer", "True")
-                VortexNative.setCoreOption("mupen64plus-Framerate", "Original")
-                Log.i(TAG, "Applied N64 performance defaults")
+                frontend.setCoreOption("mupen64plus-cpucore", "dynamic_recompiler")
+                // ThreadedRenderer MUST be False — we don't support shared EGL contexts
+                // and the render thread would crash without one
+                frontend.setCoreOption("mupen64plus-ThreadedRenderer", "False")
+                // FB emulation ON — required for GlideN64 to produce pixels on mobile GPUs.
+                // Without this, the renderer outputs zero (black) pixels.
+                frontend.setCoreOption("mupen64plus-EnableFBEmulation", "True")
+                frontend.setCoreOption("mupen64plus-EnableCopyColorToRDRAM", "Off")
+                frontend.setCoreOption("mupen64plus-EnableCopyDepthToRDRAM", "Off")
+                frontend.setCoreOption("mupen64plus-EnableN64DepthCompare", "False")
+                frontend.setCoreOption("mupen64plus-FrameDuping", "True")
+                frontend.setCoreOption("mupen64plus-Framerate", "Original")
+                frontend.setCoreOption("mupen64plus-EnableHWLighting", "False")
+                frontend.setCoreOption("mupen64plus-txFilterMode", "None")
+                frontend.setCoreOption("mupen64plus-txHiresEnable", "False")
+                Log.i(TAG, "Applied N64 performance defaults (ThreadedRenderer=False, EnableFBEmulation=True)")
             }
             libraryName == "ppsspp" -> {
-                VortexNative.setCoreOption("ppsspp_internal_resolution", "1x")
-                VortexNative.setCoreOption("ppsspp_frameskip", "1")
-                Log.i(TAG, "Applied PSP performance defaults")
+                // Software rendering by default — the PPSSPP libretro core's
+                // HW context_reset crashes on Mali GPUs (GL_INVALID_VALUE → SIGABRT).
+                // Software mode works on all chipsets. Users can switch to GPU
+                // rendering in Advanced/Compatibility settings (at their own risk).
+                frontend.setCoreOption("ppsspp_software_rendering", "enabled")
+                // Use 1x native resolution for best compatibility
+                frontend.setCoreOption("ppsspp_internal_resolution", "480x272")
+                // Disable PPSSPP's internal frameskip to avoid audio-video desync
+                frontend.setCoreOption("ppsspp_frameskip", "0")
+                frontend.setCoreOption("ppsspp_auto_frameskip", "disabled")
+                // Use fast memory access for better performance
+                frontend.setCoreOption("ppsspp_fast_memory", "enabled")
+                // GPU hardware transform for proper rendering (used when GPU mode)
+                frontend.setCoreOption("ppsspp_gpu_hardware_transform", "enabled")
+                // Software skinning for better compatibility
+                frontend.setCoreOption("ppsspp_software_skinning", "enabled")
+                // Texture scaling off for performance
+                frontend.setCoreOption("ppsspp_texture_scaling_level", "1")
+                frontend.setCoreOption("ppsspp_texture_scaling_type", "xbrz")
+                Log.i(TAG, "Applied PSP performance defaults (software rendering)")
             }
             libraryName == "flycast" -> {
-                VortexNative.setCoreOption("flycast_internal_resolution", "640x480")
+                frontend.setCoreOption("flycast_internal_resolution", "640x480")
+                frontend.setCoreOption("flycast_enable_dsp", "enabled")
+                frontend.setCoreOption("flycast_synchronous_rendering", "enabled")
+                frontend.setCoreOption("flycast_threaded_rendering", "disabled")
                 Log.i(TAG, "Applied Dreamcast performance defaults")
             }
+            libraryName == "dolphin" -> {
+                frontend.setCoreOption("dolphin_efb_scale", "1x")
+                frontend.setCoreOption("dolphin_enable_dual_core", "disabled")
+                frontend.setCoreOption("dolphin_cpu_core", "JIT64")
+                Log.i(TAG, "Applied GameCube/Wii performance defaults")
+            }
+            libraryName == "citra" -> {
+                frontend.setCoreOption("citra_resolution_factor", "1")
+                frontend.setCoreOption("citra_use_hw_renderer", "enabled")
+                Log.i(TAG, "Applied 3DS performance defaults")
+            }
+            libraryName == "play" -> {
+                frontend.setCoreOption("play_resolution_factor", "1")
+                Log.i(TAG, "Applied PS2 performance defaults")
+            }
         }
+    }
+
+    /**
+     * Apply user's per-core settings from CoreSettingsRepository.
+     * These override the hardcoded defaults above wherever applicable.
+     * Maps CoreSettingsData fields → actual libretro core option keys.
+     * Returns the loaded CoreSettingsData so callers can read UI-related fields.
+     */
+    fun applyCoreSettings(coreId: String, libraryName: String): CoreSettingsData {
+        val s = coreSettingsRepo.load(coreId)
+        Log.i(TAG, "Applying per-core settings for $coreId (backend=${s.renderBackend}, res=${s.displayResolution})")
+
+        // ── Frontend override ──
+        if (s.frontendType != null) {
+            val type = FrontendType.fromName(s.frontendType)
+            if (type != frontend.activeFrontend) {
+                frontend.activeFrontend = type
+                Log.i(TAG, "Core override: frontend → ${type.displayName}")
+            }
+        }
+
+        // ── Render Backend ──
+        // Vulkan/Ashes use Vulkan display layer (core still renders via GLES internally).
+        // OpenGL/OpenGL ES use the native GLES display path.
+        // Software forces the core's software renderer plugin.
+        when (s.renderBackend) {
+            RenderBackend.SOFTWARE -> {
+                frontend.setRenderBackend(0) // GL display for software cores
+                when {
+                    libraryName == "ppsspp" ->
+                        frontend.setCoreOption("ppsspp_software_rendering", "enabled")
+                    libraryName.startsWith("mupen64plus") ->
+                        frontend.setCoreOption("mupen64plus-rdp-plugin", "angrylion")
+                }
+                Log.i(TAG, "Backend: Software rendering forced")
+            }
+            RenderBackend.OPENGL, RenderBackend.OPENGL_ES -> {
+                frontend.setRenderBackend(0) // GL display
+                when {
+                    libraryName == "ppsspp" ->
+                        frontend.setCoreOption("ppsspp_software_rendering", "disabled")
+                    libraryName.startsWith("mupen64plus") ->
+                        frontend.setCoreOption("mupen64plus-rdp-plugin", "gliden64")
+                }
+                Log.i(TAG, "Backend: OpenGL ES (native display)")
+            }
+            RenderBackend.VULKAN, RenderBackend.ASHES -> {
+                frontend.setRenderBackend(1) // Vulkan display layer
+                when {
+                    libraryName == "ppsspp" ->
+                        frontend.setCoreOption("ppsspp_software_rendering", "disabled")
+                    libraryName.startsWith("mupen64plus") ->
+                        frontend.setCoreOption("mupen64plus-rdp-plugin", "gliden64")
+                }
+                Log.i(TAG, "Backend: Vulkan display (core uses GLES internally)")
+            }
+        }
+
+        // ── Resolution ──
+        val resMult = s.displayResolution.multiplier.toString()
+        when {
+            libraryName.startsWith("mupen64plus") -> {
+                // GlideN64 uses aspect ratio + resolution factor, not screensize
+                frontend.setCoreOption("mupen64plus-aspect", "4:3")
+                frontend.setCoreOption("mupen64plus-43screensize",
+                    "${s.displayResolution.multiplier * 320}x${s.displayResolution.multiplier * 240}")
+                // Also set the internal resolution factor for GLideN64
+                frontend.setCoreOption("mupen64plus-GLideN64InternalResolution",
+                    "${s.displayResolution.multiplier}")
+            }
+            libraryName == "ppsspp" ->
+                frontend.setCoreOption("ppsspp_internal_resolution", "${resMult}x")
+            libraryName == "flycast" -> {
+                val w = s.displayResolution.multiplier * 640
+                val h = s.displayResolution.multiplier * 480
+                frontend.setCoreOption("flycast_internal_resolution", "${w}x${h}")
+            }
+            libraryName == "dolphin" ->
+                frontend.setCoreOption("dolphin_efb_scale", "${resMult}x")
+            libraryName == "citra" || libraryName == "citra_canary" ->
+                frontend.setCoreOption("citra_resolution_factor", resMult)
+            libraryName == "play" ->
+                frontend.setCoreOption("play_resolution_factor", resMult)
+            libraryName == "swanstation" || libraryName == "beetle_psx_hw" ->
+                frontend.setCoreOption("${libraryName}_gpu_resolution_scale", resMult)
+        }
+
+        // ── Anti-Aliasing ──
+        if (s.antiAliasing != AntiAliasing.OFF) {
+            val msaaVal = s.antiAliasing.samples.toString()
+            when {
+                libraryName == "ppsspp" ->
+                    frontend.setCoreOption("ppsspp_texture_anisotropic_filtering", msaaVal)
+                libraryName.startsWith("mupen64plus") ->
+                    frontend.setCoreOption("mupen64plus-MultiSampling", msaaVal)
+                libraryName == "flycast" ->
+                    frontend.setCoreOption("flycast_anisotropic_filtering", msaaVal)
+                libraryName == "dolphin" ->
+                    frontend.setCoreOption("dolphin_anti_aliasing", msaaVal)
+                libraryName == "swanstation" || libraryName == "beetle_psx_hw" ->
+                    frontend.setCoreOption("${libraryName}_gpu_msaa", msaaVal)
+            }
+        }
+
+        // ── Frame Skip ──
+        if (s.frameSkip != FrameSkipMode.OFF) {
+            val skipVal = when (s.frameSkip) {
+                FrameSkipMode.AUTO -> "auto"
+                FrameSkipMode.SKIP_1 -> "1"
+                FrameSkipMode.SKIP_2 -> "2"
+                FrameSkipMode.SKIP_3 -> "3"
+                else -> "0"
+            }
+            when {
+                libraryName == "ppsspp" ->
+                    frontend.setCoreOption("ppsspp_frameskip", skipVal)
+                else -> frontend.setFrameSkip(skipVal.toIntOrNull() ?: 0)
+            }
+        }
+
+        // ── Auto Frame Skip ──
+        if (s.autoFrameSkip) {
+            autoFrameSkip = true
+            if (libraryName == "ppsspp")
+                frontend.setCoreOption("ppsspp_auto_frameskip", "enabled")
+        }
+
+        // ── Hardware Transform (PSP) ──
+        if (libraryName == "ppsspp") {
+            frontend.setCoreOption("ppsspp_gpu_hardware_transform",
+                if (s.hardwareTransform) "enabled" else "disabled")
+            frontend.setCoreOption("ppsspp_software_skinning",
+                if (s.softwareSkinning) "enabled" else "disabled")
+        }
+
+        // ── Hardware Tessellation ──
+        if (s.hardwareTessellation) {
+            when {
+                libraryName == "ppsspp" ->
+                    frontend.setCoreOption("ppsspp_hardware_tesselation", "enabled")
+            }
+        }
+
+        // ── Geometry Shader Culling ──
+        if (s.geometryShaderCulling) {
+            when {
+                libraryName == "ppsspp" ->
+                    frontend.setCoreOption("ppsspp_disable_range_culling", "disabled")
+            }
+        }
+
+        // ── Texture Scaling ──
+        if (libraryName == "ppsspp") {
+            frontend.setCoreOption("ppsspp_texture_scaling_level",
+                s.textureUpscaleLevel.multiplier.toString())
+            frontend.setCoreOption("ppsspp_texture_scaling_type",
+                s.textureUpscaleType.name.lowercase())
+            frontend.setCoreOption("ppsspp_texture_deposterize",
+                if (s.deposterize) "enabled" else "disabled")
+            frontend.setCoreOption("ppsspp_texture_shader",
+                if (s.textureShaderGpu) "enabled" else "disabled")
+        }
+
+        // ── Texture Filtering ──
+        if (s.anisotropicFiltering > 1) {
+            when {
+                libraryName == "ppsspp" ->
+                    frontend.setCoreOption("ppsspp_texture_anisotropic_filtering",
+                        s.anisotropicFiltering.toString())
+                libraryName.startsWith("mupen64plus") ->
+                    frontend.setCoreOption("mupen64plus-txFilterMode",
+                        if (s.anisotropicFiltering >= 4) "Smooth filtering 2" else "Smooth filtering 1")
+            }
+        }
+
+        // ── Smart 2D Texture Filtering ──
+        if (s.smart2DFiltering && libraryName == "ppsspp") {
+            frontend.setCoreOption("ppsspp_smart_2d_texture_filtering", "enabled")
+        }
+
+        // ── Texture Replacement ──
+        if (s.textureReplacement) {
+            when {
+                libraryName.startsWith("mupen64plus") ->
+                    frontend.setCoreOption("mupen64plus-txHiresEnable", "True")
+                libraryName == "ppsspp" ->
+                    frontend.setCoreOption("ppsspp_texture_replacement", "enabled")
+            }
+        }
+
+        // ── Speed Hacks ──
+        if (libraryName.startsWith("mupen64plus")) {
+            if (s.skipBufferEffects) {
+                frontend.setCoreOption("mupen64plus-EnableFBEmulation", "False")
+                frontend.setCoreOption("mupen64plus-EnableCopyColorToRDRAM", "Off")
+            }
+            if (s.lazyCaching) {
+                frontend.setCoreOption("mupen64plus-txCacheCompression", "True")
+            }
+        }
+        if (libraryName == "ppsspp") {
+            if (s.disableCulling)
+                frontend.setCoreOption("ppsspp_disable_range_culling", "enabled")
+            if (s.skipGpuReadbacks)
+                frontend.setCoreOption("ppsspp_skip_gpu_readbacks", "enabled")
+            if (s.lowerEffectsResolution)
+                frontend.setCoreOption("ppsspp_lower_resolution_for_effects", "enabled")
+        }
+
+        // ── Duplicate Frames for 60Hz ──
+        if (s.duplicateFrames60Hz) {
+            when {
+                libraryName.startsWith("mupen64plus") ->
+                    frontend.setCoreOption("mupen64plus-FrameDuping", "True")
+                libraryName == "ppsspp" ->
+                    frontend.setCoreOption("ppsspp_frame_duplication", "enabled")
+            }
+        }
+
+        // ── Command Buffer Count ──
+        if (s.commandBuffer != 2 && libraryName == "ppsspp") {
+            frontend.setCoreOption("ppsspp_inflight_frames", "Up to ${s.commandBuffer}")
+        }
+
+        // ── Spline / Bezier Quality (PSP) ──
+        if (libraryName == "ppsspp") {
+            val splineVal = when (s.splineBezierQuality) {
+                SplineBezierQuality.LOW -> "low"
+                SplineBezierQuality.MEDIUM -> "medium"
+                SplineBezierQuality.HIGH -> "high"
+            }
+            frontend.setCoreOption("ppsspp_spline_quality", splineVal)
+        }
+
+        // ── Lens Flare Occlusion ──
+        if (s.lensFlareOcclusion != LensFlareOcclusion.OFF && libraryName == "ppsspp") {
+            val occlusionVal = when (s.lensFlareOcclusion) {
+                LensFlareOcclusion.LOW -> "low"
+                LensFlareOcclusion.MEDIUM -> "medium"
+                LensFlareOcclusion.HIGH -> "high"
+                else -> "low"
+            }
+            frontend.setCoreOption("ppsspp_gpu_occlusion_query", occlusionVal)
+        }
+
+        // ── Input Polling Mode (Gemini fix: "Early" fixes dead controllers) ──
+        if (s.inputPollingMode != InputPollingMode.NORMAL) {
+            val pollVal = when (s.inputPollingMode) {
+                InputPollingMode.EARLY -> "early"
+                InputPollingMode.LATE -> "late"
+                else -> "normal"
+            }
+            // Generic libretro core option used by RetroArch-compatible cores
+            frontend.setCoreOption("input_poll_type_behavior", pollVal)
+            Log.i(TAG, "Input polling mode: ${s.inputPollingMode.name}")
+        }
+
+        // ── Threaded Video Rendering (Gemini fix: may reduce stuttering) ──
+        if (s.threadedRendering) {
+            when {
+                libraryName.startsWith("mupen64plus") ->
+                    frontend.setCoreOption("mupen64plus-ThreadedRenderer", "True")
+                libraryName == "flycast" ->
+                    frontend.setCoreOption("flycast_threaded_rendering", "enabled")
+                libraryName == "ppsspp" ->
+                    frontend.setCoreOption("ppsspp_io_timing_method", "Fast")
+            }
+            Log.i(TAG, "Threaded rendering: enabled (user override)")
+        }
+
+        // ── Shader Precision Override (Gemini fix: Mali black screen workaround) ──
+        if (s.forceShaderPrecision != ShaderPrecision.AUTO) {
+            val precisionVal = when (s.forceShaderPrecision) {
+                ShaderPrecision.FORCE_LOW -> "mediump"
+                ShaderPrecision.FORCE_HIGH -> "highp"
+                else -> "auto"
+            }
+            // Pass as a frontend-level option that native code can read
+            frontend.setCoreOption("vortex_shader_precision", precisionVal)
+            when {
+                libraryName.startsWith("mupen64plus") ->
+                    frontend.setCoreOption("mupen64plus-EnableShadersStorage", if (s.forceShaderPrecision == ShaderPrecision.FORCE_LOW) "False" else "True")
+                libraryName == "ppsspp" ->
+                    frontend.setCoreOption("ppsspp_shader_precision", precisionVal)
+            }
+            Log.i(TAG, "Shader precision: ${s.forceShaderPrecision.name}")
+        }
+
+        // ── Rewind ──
+        rewindEnabled = s.rewindEnabled
+        if (s.rewindEnabled) {
+            rewindBufferSize = s.rewindBufferSeconds * 60 // ~60fps
+            Log.i(TAG, "Rewind: enabled (buffer=${s.rewindBufferSeconds}s, ${rewindBufferSize} frames)")
+        } else {
+            rewindBufferSize = REWIND_BUFFER_SIZE
+        }
+
+        Log.i(TAG, "Per-core settings applied for $coreId")
+        return s
     }
 
     /** Remove cached ROM file so next resolveRomPath forces a fresh copy. */
@@ -140,80 +511,118 @@ class EmulationEngine @Inject constructor(
         }
     }
 
+    /** Whether a SurfaceView surface is attached for direct GPU rendering. */
+    @Volatile var surfaceReady = false; private set
+
+    /** Attach a SurfaceView's Surface for direct GPU rendering. */
+    fun setSurface(surface: android.view.Surface?) {
+        frontend.setSurface(surface)
+        surfaceReady = surface != null
+    }
+
+    fun surfaceChanged(width: Int, height: Int) {
+        frontend.surfaceChanged(width, height)
+    }
+
     fun start(onFrame: (Bitmap?) -> Unit) {
         if (isRunning) return
         isRunning = true
         isPaused = false
         rewindBuffer.clear()
 
-        val targetFps = VortexNative.getFps().let { if (it > 0) it else 60.0 }
-        val sampleRate = VortexNative.getSampleRate().let { if (it > 0) it else 44100.0 }
+        val targetFps = frontend.getFps().let { if (it > 0) it else 60.0 }
+        val sampleRate = frontend.getSampleRate().let { if (it > 0) it else 44100.0 }
         val frameTimeNs = (1_000_000_000.0 / targetFps).toLong()
+        val isHwRendered = frontend.isHardwareRendered()
 
         audioPlayer.start(sampleRate.toInt())
 
         emulationThread = Thread({
-            Log.i(TAG, "Emulation loop started: ${targetFps}fps, frameTime=${frameTimeNs}ns")
+            Log.i(TAG, "Emulation loop started: ${targetFps}fps, frameTime=${frameTimeNs}ns, hwRendered=$isHwRendered, surfaceDirect=$surfaceReady")
             var frameCount = 0L
             var fpsTimer = System.nanoTime()
             var autoSkipLevel = 0
             var slowFrames = 0
 
-            // Apply manual frame skip if set
+            // Persistent bitmap — only needed when no window surface (fallback)
+            var cachedBitmap: Bitmap? = null
+            var cachedWidth = 0
+            var cachedHeight = 0
+
+            // Disable auto-frameskip for HW-rendered cores
+            val effectiveAutoFrameSkip = autoFrameSkip && !isHwRendered
+
             if (manualFrameSkip > 0) {
-                VortexNative.setFrameSkip(manualFrameSkip)
+                frontend.setFrameSkip(manualFrameSkip)
             }
 
             while (isRunning) {
-                if (isPaused) {
-                    Thread.sleep(50)
+                if (isPaused || (!surfaceReady && isHwRendered)) {
+                    Thread.sleep(16)
                     continue
                 }
 
                 val frameStart = System.nanoTime()
 
-                // Handle rewind (step backward through saved states)
+                // Handle rewind
                 if (rewindActive && rewindBuffer.isNotEmpty()) {
                     val state = rewindBuffer.removeLast()
-                    VortexNative.loadStateFromMemory(state)
+                    frontend.loadStateFromMemory(state)
                 } else {
-                    // Save rewind state if enabled
                     if (rewindEnabled) {
-                        val state = VortexNative.saveStateToMemory()
+                        val state = frontend.saveStateToMemory()
                         if (state != null) {
-                            if (rewindBuffer.size >= REWIND_BUFFER_SIZE) {
+                            if (rewindBuffer.size >= rewindBufferSize) {
                                 rewindBuffer.removeFirst()
                             }
                             rewindBuffer.addLast(state)
                         }
                     }
 
-                    // Run one frame
-                    onPreFrame?.invoke()
-                    VortexNative.runFrame()
-                    onPostFrame?.invoke()
+                    try {
+                        onPreFrame?.invoke()
+                        frontend.runFrame()
+                        onPostFrame?.invoke()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "runFrame exception: ${e.message}", e)
+                        continue
+                    }
                 }
 
-                // Get video frame
-                val pixels = VortexNative.getFrameBuffer()
-                val w = VortexNative.getFrameWidth()
-                val h = VortexNative.getFrameHeight()
+                // Get video frame — when surface is attached, native presents
+                // directly via eglSwapBuffers.  Bitmap path is fallback only.
+                if (!surfaceReady) {
+                    val pixels = frontend.getFrameBuffer()
+                    val w = frontend.getFrameWidth()
+                    val h = frontend.getFrameHeight()
 
-                if (pixels != null && w > 0 && h > 0) {
-                    val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                    bitmap.setPixels(pixels, 0, w, 0, 0, w, h)
-                    onFrame(bitmap)
+                    if (pixels != null && w > 0 && h > 0) {
+                        val bitmap: Bitmap
+                        if (cachedBitmap != null && cachedWidth == w && cachedHeight == h) {
+                            bitmap = cachedBitmap!!
+                        } else {
+                            cachedBitmap?.recycle()
+                            bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                            cachedBitmap = bitmap
+                            cachedWidth = w
+                            cachedHeight = h
+                        }
+                        bitmap.setPixels(pixels, 0, w, 0, 0, w, h)
+                        onFrame(bitmap)
 
-                    // Handle screenshot request
-                    screenshotCallback?.let { cb ->
-                        screenshotCallback = null
-                        cb(bitmap.copy(Bitmap.Config.ARGB_8888, false))
+                        screenshotCallback?.let { cb ->
+                            screenshotCallback = null
+                            cb(bitmap.copy(Bitmap.Config.ARGB_8888, false))
+                        }
                     }
+                } else {
+                    // Surface rendering — just notify for FPS counting
+                    onFrame(null)
                 }
 
                 // Push audio (skip during rewind or if audio disabled)
                 if (audioEnabled && !rewindActive) {
-                    val audio = VortexNative.getAudioBuffer()
+                    val audio = frontend.getAudioBuffer()
                     if (audio != null && audio.isNotEmpty()) {
                         audioPlayer.writeSamples(audio)
                     }
@@ -228,20 +637,21 @@ class EmulationEngine @Inject constructor(
                     fpsTimer = now
 
                     // Auto frame skip: if FPS drops below 80% of target, increase skip
-                    if (autoFrameSkip && manualFrameSkip == 0) {
+                    // (disabled for HW-rendered cores — it breaks GL pipeline)
+                    if (effectiveAutoFrameSkip && manualFrameSkip == 0) {
                         val threshold = (targetFps * 0.8).toFloat()
                         if (currentFps < threshold) {
                             slowFrames++
                             if (slowFrames >= 2 && autoSkipLevel < 2) {
                                 autoSkipLevel++
-                                VortexNative.setFrameSkip(autoSkipLevel)
+                                frontend.setFrameSkip(autoSkipLevel)
                                 Log.i(TAG, "Auto frame skip → $autoSkipLevel (fps=$currentFps)")
                             }
                         } else {
                             slowFrames = 0
                             if (autoSkipLevel > 0 && currentFps >= targetFps.toFloat() * 0.95f) {
                                 autoSkipLevel--
-                                VortexNative.setFrameSkip(autoSkipLevel)
+                                frontend.setFrameSkip(autoSkipLevel)
                                 Log.i(TAG, "Auto frame skip → $autoSkipLevel (fps=$currentFps)")
                             }
                         }
@@ -258,6 +668,8 @@ class EmulationEngine @Inject constructor(
                 }
             }
 
+            // Clean up persistent bitmap
+            cachedBitmap?.recycle()
             audioPlayer.stop()
             Log.i(TAG, "Emulation loop stopped")
         }, "VortexEmu").apply {
@@ -269,7 +681,7 @@ class EmulationEngine @Inject constructor(
     fun pause() { isPaused = true }
     fun resume() { isPaused = false }
 
-    fun reset() { VortexNative.resetGame() }
+    fun reset() { frontend.resetGame() }
 
     fun stop() {
         isRunning = false
@@ -282,7 +694,7 @@ class EmulationEngine @Inject constructor(
             t.join(1000)
         }
         try {
-            VortexNative.unloadGame()
+            frontend.unloadGame()
         } catch (e: Exception) {
             Log.e(TAG, "Error unloading game", e)
         }
@@ -293,20 +705,20 @@ class EmulationEngine @Inject constructor(
 
     fun saveState(slotName: String): Boolean {
         val path = File(effectiveSaveDir, "$slotName.state").absolutePath
-        return VortexNative.saveState(path) == 0
+        return frontend.saveState(path) == 0
     }
 
     fun loadState(slotName: String): Boolean {
         val path = File(effectiveSaveDir, "$slotName.state").absolutePath
-        return if (File(path).exists()) VortexNative.loadState(path) == 0 else false
+        return if (File(path).exists()) frontend.loadState(path) == 0 else false
     }
 
     fun saveStateToPath(absolutePath: String): Boolean {
-        return VortexNative.saveState(absolutePath) == 0
+        return frontend.saveState(absolutePath) == 0
     }
 
     fun loadStateFromPath(absolutePath: String): Boolean {
-        return if (File(absolutePath).exists()) VortexNative.loadState(absolutePath) == 0 else false
+        return if (File(absolutePath).exists()) frontend.loadState(absolutePath) == 0 else false
     }
 
     fun exportStateTo(slotName: String, destUri: Uri): Boolean {
@@ -349,30 +761,30 @@ class EmulationEngine @Inject constructor(
         if (port == localPlayerPort && buttonId in localInputState.indices) {
             localInputState[buttonId] = value
         }
-        VortexNative.setInputState(port, buttonId, value)
+        frontend.setInputState(port, buttonId, value)
     }
 
     fun setAnalog(port: Int, index: Int, axisId: Int, value: Int) {
-        VortexNative.setAnalogState(port, index, axisId, value)
+        frontend.setAnalogState(port, index, axisId, value)
     }
 
     fun setPointer(x: Int, y: Int, pressed: Boolean) {
-        VortexNative.setPointerState(x, y, pressed)
+        frontend.setPointerState(x, y, pressed)
     }
 
     /** Whether the current core is using hardware-accelerated rendering. */
-    fun isHardwareRendered(): Boolean = VortexNative.isHardwareRendered()
+    fun isHardwareRendered(): Boolean = frontend.isHardwareRendered()
 
     // ── SRAM (battery save) ─────────────────────────────────────────
 
     fun saveSRAM(gameName: String): Boolean {
         val path = File(effectiveSaveDir, "$gameName.srm").absolutePath
-        return VortexNative.saveSRAM(path)
+        return frontend.saveSRAM(path)
     }
 
     fun loadSRAM(gameName: String): Boolean {
         val path = File(effectiveSaveDir, "$gameName.srm").absolutePath
-        return if (File(path).exists()) VortexNative.loadSRAM(path) else false
+        return if (File(path).exists()) frontend.loadSRAM(path) else false
     }
 
     // ── Rewind ──────────────────────────────────────────────────────
@@ -387,9 +799,9 @@ class EmulationEngine @Inject constructor(
     }
 
     fun takeScreenshot(): Bitmap? {
-        val pixels = VortexNative.getFrameBuffer() ?: return null
-        val w = VortexNative.getFrameWidth()
-        val h = VortexNative.getFrameHeight()
+        val pixels = frontend.getFrameBuffer() ?: return null
+        val w = frontend.getFrameWidth()
+        val h = frontend.getFrameHeight()
         if (w <= 0 || h <= 0) return null
         val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         bitmap.setPixels(pixels, 0, w, 0, 0, w, h)
@@ -418,12 +830,12 @@ class EmulationEngine @Inject constructor(
 
     fun setFrameSkip(level: Int) {
         manualFrameSkip = level.coerceIn(0, 4)
-        VortexNative.setFrameSkip(manualFrameSkip)
+        frontend.setFrameSkip(manualFrameSkip)
     }
 
     // ── ROM path resolution ─────────────────────────────────────────
 
-    private fun resolveRomPath(romUri: String): String? {
+    internal fun resolveRomPath(romUri: String): String? {
         return try {
             if (romUri.startsWith("content://")) {
                 val uri = Uri.parse(romUri)

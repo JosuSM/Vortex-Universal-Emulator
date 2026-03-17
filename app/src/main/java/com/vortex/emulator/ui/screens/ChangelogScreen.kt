@@ -88,7 +88,7 @@ fun ChangelogScreen(onBack: () -> Unit) {
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Version 2.1-Galaxy",
+                            text = "Version 2.2-Nova",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.ExtraBold,
                             color = VortexCyan
@@ -104,6 +104,45 @@ fun ChangelogScreen(onBack: () -> Unit) {
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+
+            // ── Per-Core Advanced Settings ──
+            ChangelogSection(
+                icon = Icons.Filled.Tune,
+                title = "Per-Core Advanced Settings",
+                items = listOf(
+                    "New Advanced / Compatibility section in per-core settings",
+                    "Input Polling Mode — choose Normal or Early Poll for tighter controls",
+                    "Threaded Rendering toggle — disable to fix rendering on some Mali GPUs",
+                    "Shader Precision — pick Low, Medium, or High per core",
+                    "Rewind toggle and buffer size (60–600 frames) per core",
+                    "Access: long-press a game → Settings → Advanced / Compatibility"
+                )
+            )
+
+            // ── PSP / Standalone Fixes ──
+            ChangelogSection(
+                icon = Icons.Filled.Build,
+                title = "PSP Core & Standalone Detection",
+                items = listOf(
+                    "PSP (PPSSPP) core now defaults to software rendering — no more crashes on Mali GPUs",
+                    "Users can switch to GPU rendering in Advanced / Compatibility (at their own risk)",
+                    "Crash-safe context_reset — GPU init failures are caught instead of crashing the app",
+                    "Standalone emulators are now re-detected every time you open Home or Cores screen",
+                    "Libretro cores are now preferred by default — your built-in multiplayer always works",
+                    "Standalone emulators remain available for manual selection via core picker"
+                )
+            )
+
+            // ── UI Improvements ──
+            ChangelogSection(
+                icon = Icons.Filled.Palette,
+                title = "Cleaner Emulation UI",
+                items = listOf(
+                    "Exit button moved to Quick Menu → Quit Game (no more accidental exits)",
+                    "Pause and Menu buttons moved to center — no overlap with L/R shoulder buttons",
+                    "Quick Menu accessible via the ⋮ icon at the top center of the game screen"
+                )
+            )
 
             // ── Multiplayer section ──
             ChangelogSection(

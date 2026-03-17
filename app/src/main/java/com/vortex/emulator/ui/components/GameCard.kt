@@ -251,4 +251,13 @@ fun Platform.toColor(): Color = when (this) {
     Platform.THREEDS -> ThreeDSRed
     Platform.PS2 -> PS2Blue
     Platform.VITA -> VitaBlue
+    Platform.PCE -> PceTeal
+    Platform.ATARI2600 -> AtariOrange
+    Platform.ATARI7800 -> AtariOrange
+    Platform.LYNX -> LynxYellow
+    Platform.NGP -> NeoGeoGold
+    Platform.WONDERSWAN -> WonderSwanSilver
+    Platform.VIRTUALBOY -> VirtualBoyRed
+    Platform.DOS -> DosPurple
+    Platform.THREEDO -> ThreeDOGreen
 }

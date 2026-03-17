@@ -22,6 +22,10 @@ class PerformanceViewModel @Inject constructor(
         emit(chipsetDetector.getRecommendedSettings())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    val coreProfiles: StateFlow<List<CorePerformanceProfile>> = flow {
+        emit(chipsetDetector.getCoreProfiles())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val drivers: StateFlow<List<DriverInfo>> = driverManager.drivers
 
     val activeDriver: StateFlow<DriverInfo?> = driverManager.activeDriver
@@ -29,6 +33,12 @@ class PerformanceViewModel @Inject constructor(
     fun activateDriver(driver: DriverInfo) {
         viewModelScope.launch {
             driverManager.activateDriver(driver)
+        }
+    }
+
+    fun saveDriverSelection() {
+        viewModelScope.launch {
+            driverManager.persistActiveDriver()
         }
     }
 }

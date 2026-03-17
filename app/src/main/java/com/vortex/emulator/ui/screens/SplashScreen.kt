@@ -249,7 +249,7 @@ fun VortexSplashScreen(onFinished: () -> Unit) {
 
             // Version badge
             Text(
-                text = "v2.1-Galaxy",
+                text = "v2.2-Nova",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = VortexPurple.copy(alpha = 0.7f),

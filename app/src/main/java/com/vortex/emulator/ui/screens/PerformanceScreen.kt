@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,12 +26,15 @@ import com.vortex.emulator.ui.viewmodel.PerformanceViewModel
 
 @Composable
 fun PerformanceScreen(
+    onNavigateBack: () -> Unit = {},
     viewModel: PerformanceViewModel = hiltViewModel()
 ) {
     val chipsetInfo by viewModel.chipsetInfo.collectAsState()
     val recommendation by viewModel.recommendation.collectAsState()
     val drivers by viewModel.drivers.collectAsState()
     val activeDriver by viewModel.activeDriver.collectAsState()
+    val coreProfiles by viewModel.coreProfiles.collectAsState()
+    var saveConfirmed by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -195,6 +199,103 @@ fun PerformanceScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Device Info
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.PhoneAndroid,
+                            contentDescription = null,
+                            tint = VortexCyan,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Device",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    val dev = info.deviceInfo
+                    GpuInfoRow("Model", "${dev.manufacturer} ${dev.model}")
+                    GpuInfoRow("Brand", dev.brand.replaceFirstChar { it.uppercase() })
+                    GpuInfoRow("Codename", dev.device)
+                    GpuInfoRow("Android", "${dev.androidVersion} (SDK ${dev.sdkVersion})")
+                    GpuInfoRow("Security", dev.securityPatch)
+                    GpuInfoRow("Display", "${dev.screenWidthPx}x${dev.screenHeightPx} @ ${dev.displayDensityDpi}dpi")
+                    GpuInfoRow("GPU Driver", dev.gpuDriverVersion)
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    ApiBadge(dev.deviceCategory.displayName, VortexCyan)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Per-Core Performance Profiles
+            if (coreProfiles.isNotEmpty()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Filled.Tune,
+                                contentDescription = null,
+                                tint = VortexOrange,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Per-Core Profiles",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = "Tuned for your ${info.deviceInfo.deviceCategory.displayName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        coreProfiles.forEach { profile ->
+                            CoreProfileCard(profile)
+                            if (profile != coreProfiles.last()) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(vertical = 6.dp),
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             // Recommendations
             recommendation?.let { rec ->
                 Card(
@@ -245,34 +346,40 @@ fun PerformanceScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // GPU Drivers
-            if (drivers.isNotEmpty()) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Filled.SettingsApplications,
-                                contentDescription = null,
-                                tint = VortexMagenta,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "GPU Drivers",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.SettingsApplications,
+                            contentDescription = null,
+                            tint = VortexMagenta,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "GPU Drivers",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
+                    if (drivers.isEmpty()) {
+                        Text(
+                            text = "No compatible drivers detected for this GPU.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
                         drivers.forEach { driver ->
                             DriverRow(
                                 driver = driver,
@@ -288,6 +395,57 @@ fun PerformanceScreen(
                         }
                     }
                 }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Action buttons — Save Changes & Exit to Main Menu
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(
+                onClick = onNavigateBack,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                )
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Main Menu", fontWeight = FontWeight.SemiBold)
+            }
+
+            Button(
+                onClick = {
+                    viewModel.saveDriverSelection()
+                    saveConfirmed = true
+                },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = VortexGreen
+                )
+            ) {
+                Icon(
+                    Icons.Filled.Save,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    if (saveConfirmed) "Saved ✓" else "Save Changes",
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.surface
+                )
             }
         }
 
@@ -445,5 +603,38 @@ fun DriverRow(
                 Text("Use", style = MaterialTheme.typography.labelSmall)
             }
         }
+    }
+}
+
+@Composable
+fun CoreProfileCard(profile: com.vortex.emulator.gpu.CorePerformanceProfile) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
+        Text(
+            text = profile.coreName,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ApiBadge("${profile.resolutionMultiplier}x Res", VortexCyan)
+            if (profile.useHardwareRenderer)
+                ApiBadge("HW Render", VortexGreen)
+            if (profile.frameSkip > 0)
+                ApiBadge("Skip ${profile.frameSkip}", VortexOrange)
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+            text = profile.notes,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

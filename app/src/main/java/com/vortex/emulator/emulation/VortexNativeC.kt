@@ -1,11 +1,14 @@
 package com.vortex.emulator.emulation
 
 /**
- * JNI bridge to the native libretro frontend (libvortex_frontend.so).
+ * JNI bridge to the pure-C libretro frontend (libvortex_frontend_c.so).
+ *
+ * Provides the same API as [VortexNative] but backed by the C implementation,
+ * which offers better compatibility with C-based cores (e.g. mupen64plus/GlideN64).
  */
-object VortexNative {
+object VortexNativeC {
     init {
-        System.loadLibrary("vortex_frontend")
+        System.loadLibrary("vortex_frontend_c")
     }
 
     /** Load a libretro core .so file. Returns 0 on success, negative on error. */
@@ -31,9 +34,6 @@ object VortexNative {
 
     /** Core-reported FPS. */
     external fun getFps(): Double
-
-    /** True if the HW context_reset callback threw an exception (core GPU init failed). */
-    external fun isHwContextFailed(): Boolean
 
     /** Core-reported audio sample rate. */
     external fun getSampleRate(): Double
@@ -83,7 +83,7 @@ object VortexNative {
     /** Set frame skip level (0 = off, 1 = every other, 2 = skip 2 of 3, etc.). */
     external fun setFrameSkip(skip: Int)
 
-    /** Set display render backend: 0=OpenGL ES (default), 1=Vulkan. Call before loadCore. */
+    /** Set the display render backend (0 = GL, 1 = Vulkan). */
     external fun setRenderBackend(backend: Int)
 
     /** Attach a SurfaceView's Surface for direct GPU rendering (zero-copy). */
@@ -91,22 +91,4 @@ object VortexNative {
 
     /** Notify native side of surface size changes. */
     external fun surfaceChanged(width: Int, height: Int)
-
-    /* Libretro button ID constants (matching libretro.h) */
-    const val RETRO_DEVICE_ID_JOYPAD_B      = 0
-    const val RETRO_DEVICE_ID_JOYPAD_Y      = 1
-    const val RETRO_DEVICE_ID_JOYPAD_SELECT = 2
-    const val RETRO_DEVICE_ID_JOYPAD_START  = 3
-    const val RETRO_DEVICE_ID_JOYPAD_UP     = 4
-    const val RETRO_DEVICE_ID_JOYPAD_DOWN   = 5
-    const val RETRO_DEVICE_ID_JOYPAD_LEFT   = 6
-    const val RETRO_DEVICE_ID_JOYPAD_RIGHT  = 7
-    const val RETRO_DEVICE_ID_JOYPAD_A      = 8
-    const val RETRO_DEVICE_ID_JOYPAD_X      = 9
-    const val RETRO_DEVICE_ID_JOYPAD_L      = 10
-    const val RETRO_DEVICE_ID_JOYPAD_R      = 11
-    const val RETRO_DEVICE_ID_JOYPAD_L2     = 12
-    const val RETRO_DEVICE_ID_JOYPAD_R2     = 13
-    const val RETRO_DEVICE_ID_JOYPAD_L3     = 14
-    const val RETRO_DEVICE_ID_JOYPAD_R3     = 15
 }

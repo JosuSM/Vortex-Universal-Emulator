@@ -9,9 +9,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vortex.emulator.core.CoreInfo
 import com.vortex.emulator.core.CoreManager
+import com.vortex.emulator.core.CoreSettingsData
+import com.vortex.emulator.core.CoreSettingsRepository
 import com.vortex.emulator.emulation.AudioLatency
 import com.vortex.emulator.emulation.EmulationEngine
 import com.vortex.emulator.emulation.GamepadManager
+import com.vortex.emulator.emulation.StandaloneDownloader
+import com.vortex.emulator.emulation.StandaloneLauncher
 import com.vortex.emulator.emulation.VortexNative
 import com.vortex.emulator.game.Game
 import com.vortex.emulator.game.GameDao
@@ -42,7 +46,10 @@ class EmulationViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     val engine: EmulationEngine,
     private val gamepadManager: GamepadManager,
-    private val internetNetplay: InternetNetplayManager
+    private val internetNetplay: InternetNetplayManager,
+    private val standaloneLauncher: StandaloneLauncher,
+    private val standaloneDownloader: StandaloneDownloader,
+    private val coreSettingsRepo: CoreSettingsRepository
 ) : ViewModel() {
 
     private val gameId: Long = savedStateHandle["gameId"] ?: 0L
@@ -103,12 +110,31 @@ class EmulationViewModel @Inject constructor(
     private val _quickSaveSlot = MutableStateFlow(0)
     val quickSaveSlot: StateFlow<Int> = _quickSaveSlot.asStateFlow()
 
+    // Per-core UI settings (opacity, scale, haptic, FPS overlay)
+    private val _coreSettings = MutableStateFlow(CoreSettingsData())
+    val coreSettings: StateFlow<CoreSettingsData> = _coreSettings.asStateFlow()
+
     // Gamepad state
     val isGamepadConnected: Boolean get() = gamepadManager.isGamepadConnected
     val gamepadName: String? get() = gamepadManager.connectedGamepadName
 
+    // Standalone emulator state
+    private val _standaloneOptions = MutableStateFlow<List<com.vortex.emulator.emulation.EmulatorOption>>(emptyList())
+    val standaloneOptions: StateFlow<List<com.vortex.emulator.emulation.EmulatorOption>> = _standaloneOptions.asStateFlow()
+
+    private val _isStandaloneLaunch = MutableStateFlow(false)
+    val isStandaloneLaunch: StateFlow<Boolean> = _isStandaloneLaunch.asStateFlow()
+
+    // Standalone download progress (0..1)
+    private val _standaloneDownloadProgress = MutableStateFlow(0f)
+    val standaloneDownloadProgress: StateFlow<Float> = _standaloneDownloadProgress.asStateFlow()
+
+    private val _isDownloadingStandalone = MutableStateFlow(false)
+    val isDownloadingStandalone: StateFlow<Boolean> = _isDownloadingStandalone.asStateFlow()
+
     init {
         gamepadManager.engine = engine
+        coreManager.refreshInstalled()
         loadAndStart()
     }
 
@@ -138,13 +164,50 @@ class EmulationViewModel @Inject constructor(
 
                 gameDao.updateGame(loaded.copy(lastPlayed = System.currentTimeMillis()))
 
+                // ── VortexFramework: Standalone emulator path ──
+                if (core.isStandalone) {
+                    _isStandaloneLaunch.value = true
+                    _statusMessage.value = "Launching ${core.displayName}…"
+
+                    if (!standaloneLauncher.isAnyEmulatorInstalled(core)) {
+                        // Show available emulators for installation
+                        _standaloneOptions.value = standaloneLauncher.getAvailableEmulators(core)
+                        _error.value = "No standalone emulator installed for ${core.name}. Download one below."
+                        _emulationState.value = EmulationState.ERROR
+                        return@launch
+                    }
+
+                    // Resolve the ROM path (content:// → file path)
+                    val romPath = engine.resolveRomPath(loaded.romPath)
+                    if (romPath == null) {
+                        _error.value = "Cannot access ROM file"
+                        _emulationState.value = EmulationState.ERROR
+                        return@launch
+                    }
+
+                    val launched = standaloneLauncher.launch(core, romPath)
+                    if (launched) {
+                        _statusMessage.value = "${core.displayName} launched"
+                        _emulationState.value = EmulationState.RUNNING
+                    } else {
+                        _standaloneOptions.value = standaloneLauncher.getAvailableEmulators(core)
+                        _error.value = "Failed to launch ${core.name}. The app may not support direct file launching."
+                        _emulationState.value = EmulationState.ERROR
+                    }
+                    return@launch
+                }
+
+                // ── Libretro core path (existing) ──
                 _statusMessage.value = "Preparing ${core.displayName} core…"
-                val prepError = engine.prepare(core.libraryName, loaded.romPath)
+                val prepError = engine.prepare(core.libraryName, loaded.romPath, core.id)
                 if (prepError != null) {
                     _error.value = prepError
                     _emulationState.value = EmulationState.ERROR
                     return@launch
                 }
+
+                // Load per-core UI settings for touch controls / overlays
+                _coreSettings.value = coreSettingsRepo.load(core.id)
 
                 // Refresh core cache status after successful prepare
                 coreManager.refreshInstalled()
@@ -388,4 +451,43 @@ class EmulationViewModel @Inject constructor(
         engine.onPostFrame = null
         engine.stop()
     }
+
+    /** Get an install Intent for a standalone emulator package. */
+    fun getInstallIntent(packageName: String): android.content.Intent {
+        return standaloneLauncher.getInstallIntent(packageName)
+    }
+
+    /** Download and install a standalone emulator APK natively. */
+    fun downloadStandaloneEmulator(libraryName: String) {
+        if (_isDownloadingStandalone.value) return
+        viewModelScope.launch {
+            _isDownloadingStandalone.value = true
+            _standaloneDownloadProgress.value = 0f
+
+            val result = standaloneDownloader.downloadAndInstall(libraryName) { downloaded, total ->
+                _standaloneDownloadProgress.value = if (total > 0) downloaded.toFloat() / total else 0f
+            }
+
+            _isDownloadingStandalone.value = false
+
+            when (result) {
+                is StandaloneDownloader.DownloadResult.Success -> {
+                    _error.value = "APK downloaded! Follow the system installer to complete."
+                }
+                is StandaloneDownloader.DownloadResult.NoRelease -> {
+                    _error.value = "No APK found in latest release. Visit: ${result.fallbackUrl}"
+                }
+                is StandaloneDownloader.DownloadResult.DownloadFailed -> {
+                    _error.value = "Download failed. Visit: ${result.fallbackUrl}"
+                }
+                is StandaloneDownloader.DownloadResult.NoSource -> {
+                    _error.value = "No download source available for this emulator."
+                }
+            }
+        }
+    }
+
+    /** Check if a standalone core has a native download source. */
+    fun hasStandaloneDownload(libraryName: String): Boolean =
+        standaloneDownloader.hasDownloadSource(libraryName)
 }

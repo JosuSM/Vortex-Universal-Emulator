@@ -26,3 +26,9 @@
 
 # Generated
 /app/src/main/gen/
+
+# Rust build
+/rust_frontend/target/
+
+# IDE
+.vscode/

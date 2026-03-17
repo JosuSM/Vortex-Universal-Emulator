@@ -183,11 +183,22 @@ fun VortexNavHost(navController: NavHostController) {
             }
 
             composable(Screen.Cores.route) {
-                CoresScreen()
+                CoresScreen(
+                    onCoreSettings = { coreId ->
+                        navController.navigate(Screen.CoreSettings.createRoute(coreId))
+                    }
+                )
             }
 
             composable(Screen.Performance.route) {
-                PerformanceScreen()
+                PerformanceScreen(
+                    onNavigateBack = {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.Home.route) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    }
+                )
             }
 
             composable(Screen.Multiplayer.route) {
@@ -215,6 +226,17 @@ fun VortexNavHost(navController: NavHostController) {
 
             composable(Screen.Patcher.route) {
                 PatcherScreen(onBack = { navController.popBackStack() })
+            }
+
+            composable(
+                route = Screen.CoreSettings.route,
+                arguments = listOf(navArgument("coreId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val coreId = backStackEntry.arguments?.getString("coreId") ?: ""
+                CoreSettingsScreen(
+                    coreId = coreId,
+                    onBack = { navController.popBackStack() }
+                )
             }
 
             composable(

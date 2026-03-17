@@ -89,8 +89,8 @@ android {
         applicationId = "com.vortex.emulator"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.1-Galaxy"
+        versionCode = 3
+        versionName = "2.2-Nova"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
@@ -98,7 +98,7 @@ android {
 
         externalNativeBuild {
             cmake {
-                cppFlags += ""
+                cppFlags += "-std=c++17"
             }
         }
 

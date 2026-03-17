@@ -56,3 +56,13 @@ val SaturnBlue = Color(0xFF0277BD)
 val ThreeDSRed = Color(0xFFB71C1C)
 val PS2Blue = Color(0xFF0D47A1)
 val VitaBlue = Color(0xFF00838F)
+
+// Lemuroid extra platform colors
+val PceTeal = Color(0xFF00897B)
+val AtariOrange = Color(0xFFD84315)
+val LynxYellow = Color(0xFFFFB300)
+val NeoGeoGold = Color(0xFFF57F17)
+val WonderSwanSilver = Color(0xFF78909C)
+val VirtualBoyRed = Color(0xFFC62828)
+val DosPurple = Color(0xFF4527A0)
+val ThreeDOGreen = Color(0xFF1B5E20)
