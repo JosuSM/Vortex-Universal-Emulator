@@ -341,11 +341,34 @@ class CoreManager @Inject constructor(
                 isLemuroidDefault = true,
                 downloadSizeMb = 12.4f,
                 features = setOf(
-                    CoreFeature.SAVE_STATES, CoreFeature.FAST_FORWARD,
+                    CoreFeature.SAVE_STATES, CoreFeature.REWIND,
+                    CoreFeature.FAST_FORWARD,
                     CoreFeature.CHEATS, CoreFeature.HIGH_RESOLUTION,
                     CoreFeature.VULKAN_RENDERER, CoreFeature.OPENGL_RENDERER,
                     CoreFeature.ANALOG_STICK, CoreFeature.RUMBLE, CoreFeature.SHADERS,
                     CoreFeature.NETPLAY
+                )
+            ),
+            // ── PSP (Rocket PSP Engine) ─────────────────────────
+            CoreInfo(
+                id = "vortex_psp_rocket",
+                name = "Rocket PSP",
+                displayName = "🚀 Rocket PSP Engine",
+                version = "1.0",
+                author = "Vortex Team (based on PPSSPP by Henrik Rydgård)",
+                description = "Built-in PSP engine optimized for speed and compatibility. " +
+                    "Uses aggressive performance tuning with fast memory, GPU hardware transform, " +
+                    "and auto-detected optimal settings per GPU chipset. Based on PPSSPP (GPL v2+).",
+                supportedPlatforms = listOf(Platform.PSP),
+                libraryName = "ppsspp",
+                isBundled = true,
+                downloadSizeMb = 0f,  // shares the same .so as vortex_psp_ppsspp
+                features = setOf(
+                    CoreFeature.SAVE_STATES, CoreFeature.REWIND,
+                    CoreFeature.FAST_FORWARD,
+                    CoreFeature.CHEATS, CoreFeature.HIGH_RESOLUTION,
+                    CoreFeature.VULKAN_RENDERER, CoreFeature.OPENGL_RENDERER,
+                    CoreFeature.ANALOG_STICK, CoreFeature.RUMBLE, CoreFeature.SHADERS
                 )
             ),
             // ── Dreamcast ───────────────────────────────────────
@@ -766,6 +789,44 @@ class CoreManager @Inject constructor(
                     CoreFeature.VULKAN_RENDERER, CoreFeature.OPENGL_RENDERER,
                     CoreFeature.ANALOG_STICK, CoreFeature.RUMBLE, CoreFeature.SHADERS,
                     CoreFeature.NETPLAY, CoreFeature.WIDESCREEN_HACK
+                ),
+                isStandalone = true
+            ),
+            // ── PSP (Standalone — RetroArch) ────────────────────
+            CoreInfo(
+                id = "vortex_psp_retroarch",
+                name = "RetroArch (PSP)",
+                displayName = "RetroArch Standalone (PSP)",
+                version = "1.19+",
+                author = "libretro Team",
+                description = "Launch RetroArch standalone with PPSSPP core. Open-source multi-emulator with full shader and overlay support.",
+                supportedPlatforms = listOf(Platform.PSP),
+                libraryName = "retroarch_psp_standalone",
+                isBundled = false,
+                downloadSizeMb = 0f,
+                features = setOf(
+                    CoreFeature.SAVE_STATES, CoreFeature.REWIND, CoreFeature.FAST_FORWARD,
+                    CoreFeature.CHEATS, CoreFeature.HIGH_RESOLUTION,
+                    CoreFeature.VULKAN_RENDERER, CoreFeature.OPENGL_RENDERER,
+                    CoreFeature.ANALOG_STICK, CoreFeature.RUMBLE, CoreFeature.SHADERS
+                ),
+                isStandalone = true
+            ),
+            // ── PSP (Standalone — Lemuroid) ─────────────────────
+            CoreInfo(
+                id = "vortex_psp_lemuroid",
+                name = "Lemuroid (PSP)",
+                displayName = "Lemuroid Standalone (PSP)",
+                version = "1.15+",
+                author = "Nicholás Opuni",
+                description = "Launch Lemuroid, an open-source multi-system emulator with PSP support. Simple UI, auto-scan ROMs.",
+                supportedPlatforms = listOf(Platform.PSP),
+                libraryName = "lemuroid_psp_standalone",
+                isBundled = false,
+                downloadSizeMb = 0f,
+                features = setOf(
+                    CoreFeature.SAVE_STATES, CoreFeature.FAST_FORWARD,
+                    CoreFeature.ANALOG_STICK, CoreFeature.OPENGL_RENDERER
                 ),
                 isStandalone = true
             ),

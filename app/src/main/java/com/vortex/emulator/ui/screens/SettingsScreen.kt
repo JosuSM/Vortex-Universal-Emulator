@@ -597,7 +597,386 @@ fun SettingsScreen(
             }
         }
 
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+        )
+
+        // Open Source Licenses Section
+        SettingSectionHeader(icon = Icons.Filled.Gavel, title = "Open Source Licenses")
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Vortex Emulator is built on the following open-source projects. " +
+                        "We are grateful to all authors and contributors.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // ── Framework ───────────────────────────────
+                LicenseGroupHeader(title = "Framework")
+                LicenseEntry(
+                    name = "libretro / RetroArch",
+                    author = "libretro Team",
+                    license = "GPL v3+",
+                    url = "github.com/libretro"
+                )
+
+                // ── PSP ─────────────────────────────────────
+                LicenseGroupHeader(title = "PSP")
+                LicenseEntry(
+                    name = "PPSSPP",
+                    author = "Henrik Rydgård",
+                    license = "GPL v2+",
+                    url = "github.com/hrydgard/ppsspp"
+                )
+                LicenseEntry(
+                    name = "Rocket PSP Engine",
+                    author = "Vortex Team (based on PPSSPP)",
+                    license = "GPL v2+",
+                    url = "github.com/hrydgard/ppsspp"
+                )
+
+                // ── NES ─────────────────────────────────────
+                LicenseGroupHeader(title = "NES / Famicom")
+                LicenseEntry(
+                    name = "FCEUmm",
+                    author = "FCEUmm Team",
+                    license = "GPL v2+",
+                    url = "github.com/libretro/libretro-fceumm"
+                )
+                LicenseEntry(
+                    name = "Mesen",
+                    author = "Sour",
+                    license = "GPL v2+",
+                    url = "github.com/SourMesen/Mesen2"
+                )
+                LicenseEntry(
+                    name = "Nestopia UE",
+                    author = "Libretro",
+                    license = "GPL v2+",
+                    url = "github.com/libretro/nestopia"
+                )
+
+                // ── SNES ────────────────────────────────────
+                LicenseGroupHeader(title = "SNES / Super Famicom")
+                LicenseEntry(
+                    name = "Snes9x",
+                    author = "Snes9x Team",
+                    license = "Snes9x License",
+                    url = "github.com/snes9xgit/snes9x"
+                )
+                LicenseEntry(
+                    name = "bsnes",
+                    author = "Near / Screwtape",
+                    license = "GPL v3",
+                    url = "github.com/libretro/bsnes-libretro"
+                )
+
+                // ── N64 ─────────────────────────────────────
+                LicenseGroupHeader(title = "Nintendo 64")
+                LicenseEntry(
+                    name = "Mupen64Plus-Next",
+                    author = "Mupen64Plus Team",
+                    license = "GPL v2+",
+                    url = "github.com/libretro/mupen64plus-libretro-nx"
+                )
+                LicenseEntry(
+                    name = "ParaLLEl N64",
+                    author = "Libretro Team",
+                    license = "GPL v2+",
+                    url = "github.com/libretro/parallel-n64"
+                )
+
+                // ── GB / GBC / GBA ──────────────────────────
+                LicenseGroupHeader(title = "Game Boy / GBA")
+                LicenseEntry(
+                    name = "mGBA",
+                    author = "endrift",
+                    license = "MPL 2.0",
+                    url = "github.com/mgba-emu/mgba"
+                )
+                LicenseEntry(
+                    name = "Gambatte",
+                    author = "sinamas",
+                    license = "GPL v2",
+                    url = "github.com/libretro/gambatte-libretro"
+                )
+                LicenseEntry(
+                    name = "SameBoy",
+                    author = "LIJI",
+                    license = "MIT",
+                    url = "github.com/LIJI32/SameBoy"
+                )
+                LicenseEntry(
+                    name = "VBA-M",
+                    author = "VBA-M Team",
+                    license = "GPL v2+",
+                    url = "github.com/visualboyadvance-m/visualboyadvance-m"
+                )
+
+                // ── NDS ─────────────────────────────────────
+                LicenseGroupHeader(title = "Nintendo DS")
+                LicenseEntry(
+                    name = "melonDS",
+                    author = "Arisotura",
+                    license = "GPL v3",
+                    url = "github.com/melonDS-emu/melonDS"
+                )
+                LicenseEntry(
+                    name = "DeSmuME",
+                    author = "DeSmuME Team",
+                    license = "GPL v2+",
+                    url = "github.com/TASEmulators/desmume"
+                )
+
+                // ── PSX ─────────────────────────────────────
+                LicenseGroupHeader(title = "PlayStation")
+                LicenseEntry(
+                    name = "SwanStation",
+                    author = "stenzek",
+                    license = "GPL v3",
+                    url = "github.com/libretro/swanstation"
+                )
+                LicenseEntry(
+                    name = "Beetle PSX HW",
+                    author = "Mednafen / Libretro",
+                    license = "GPL v2",
+                    url = "github.com/libretro/beetle-psx-libretro"
+                )
+                LicenseEntry(
+                    name = "PCSX ReARMed",
+                    author = "notaz / libretro",
+                    license = "GPL v2+",
+                    url = "github.com/libretro/pcsx_rearmed"
+                )
+
+                // ── PS2 ─────────────────────────────────────
+                LicenseGroupHeader(title = "PlayStation 2")
+                LicenseEntry(
+                    name = "Play!",
+                    author = "Jean-Philip Desjardins",
+                    license = "MIT",
+                    url = "github.com/jpd002/Play-"
+                )
+
+                // ── Dreamcast ───────────────────────────────
+                LicenseGroupHeader(title = "Dreamcast")
+                LicenseEntry(
+                    name = "Flycast",
+                    author = "Flycast Team",
+                    license = "GPL v2",
+                    url = "github.com/flyinghead/flycast"
+                )
+
+                // ── Saturn ──────────────────────────────────
+                LicenseGroupHeader(title = "Saturn")
+                LicenseEntry(
+                    name = "Beetle Saturn",
+                    author = "Mednafen",
+                    license = "GPL v2",
+                    url = "github.com/libretro/beetle-saturn-libretro"
+                )
+                LicenseEntry(
+                    name = "Yabause",
+                    author = "Yabause Team",
+                    license = "GPL v2",
+                    url = "github.com/libretro/yabause"
+                )
+
+                // ── GameCube / Wii ──────────────────────────
+                LicenseGroupHeader(title = "GameCube / Wii")
+                LicenseEntry(
+                    name = "Dolphin",
+                    author = "Dolphin Team",
+                    license = "GPL v2+",
+                    url = "github.com/dolphin-emu/dolphin"
+                )
+
+                // ── 3DS ─────────────────────────────────────
+                LicenseGroupHeader(title = "Nintendo 3DS")
+                LicenseEntry(
+                    name = "Citra",
+                    author = "Citra Team",
+                    license = "GPL v2+",
+                    url = "github.com/citra-emu/citra"
+                )
+                LicenseEntry(
+                    name = "Panda3DS",
+                    author = "Panda3DS Team",
+                    license = "GPL v3",
+                    url = "github.com/wheremyfoodat/Panda3DS"
+                )
+
+                // ── Genesis / Mega Drive ────────────────────
+                LicenseGroupHeader(title = "Genesis / Mega Drive")
+                LicenseEntry(
+                    name = "Genesis Plus GX",
+                    author = "ekeeke",
+                    license = "Non-commercial",
+                    url = "github.com/libretro/Genesis-Plus-GX"
+                )
+                LicenseEntry(
+                    name = "PicoDrive",
+                    author = "notaz",
+                    license = "MAME-like",
+                    url = "github.com/libretro/picodrive"
+                )
+
+                // ── Arcade ──────────────────────────────────
+                LicenseGroupHeader(title = "Arcade")
+                LicenseEntry(
+                    name = "FinalBurn Neo",
+                    author = "FBNeo Team",
+                    license = "Non-commercial",
+                    url = "github.com/libretro/FBNeo"
+                )
+                LicenseEntry(
+                    name = "MAME 2003-Plus",
+                    author = "Libretro Team",
+                    license = "MAME License",
+                    url = "github.com/libretro/mame2003-plus-libretro"
+                )
+
+                // ── PC Engine ───────────────────────────────
+                LicenseGroupHeader(title = "PC Engine / TurboGrafx-16")
+                LicenseEntry(
+                    name = "Beetle PCE Fast",
+                    author = "Mednafen / libretro",
+                    license = "GPL v2",
+                    url = "github.com/libretro/beetle-pce-fast-libretro"
+                )
+
+                // ── Atari ───────────────────────────────────
+                LicenseGroupHeader(title = "Atari")
+                LicenseEntry(
+                    name = "Stella 2014",
+                    author = "Stephen Anthony / libretro",
+                    license = "GPL v2",
+                    url = "github.com/libretro/stella2014-libretro"
+                )
+                LicenseEntry(
+                    name = "ProSystem",
+                    author = "Greg Stanton / libretro",
+                    license = "GPL v2",
+                    url = "github.com/libretro/prosystem-libretro"
+                )
+                LicenseEntry(
+                    name = "Handy",
+                    author = "K. Wilkins / libretro",
+                    license = "Zlib",
+                    url = "github.com/libretro/libretro-handy"
+                )
+
+                // ── Misc handhelds ──────────────────────────
+                LicenseGroupHeader(title = "Other Handhelds")
+                LicenseEntry(
+                    name = "Beetle NGP",
+                    author = "Mednafen / libretro",
+                    license = "GPL v2",
+                    url = "github.com/libretro/beetle-ngp-libretro"
+                )
+                LicenseEntry(
+                    name = "Beetle WonderSwan",
+                    author = "Mednafen / libretro",
+                    license = "GPL v2",
+                    url = "github.com/libretro/beetle-wswan-libretro"
+                )
+                LicenseEntry(
+                    name = "Beetle VB",
+                    author = "Mednafen / libretro",
+                    license = "GPL v2",
+                    url = "github.com/libretro/beetle-vb-libretro"
+                )
+
+                // ── DOS / 3DO ───────────────────────────────
+                LicenseGroupHeader(title = "DOS / 3DO")
+                LicenseEntry(
+                    name = "DOSBox Pure",
+                    author = "Bernhard Schelling / libretro",
+                    license = "GPL v2+",
+                    url = "github.com/schellingb/dosbox-pure"
+                )
+                LicenseEntry(
+                    name = "Opera",
+                    author = "trapexit / libretro",
+                    license = "GPL v2",
+                    url = "github.com/libretro/opera-libretro"
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "All emulation cores are property of their respective authors. " +
+                        "Vortex Emulator does not include or distribute any copyrighted game ROMs or BIOS files.",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(32.dp))
+    }
+}
+
+@Composable
+private fun LicenseGroupHeader(title: String) {
+    Spacer(modifier = Modifier.height(10.dp))
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.Bold,
+        color = VortexCyan.copy(alpha = 0.85f)
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+}
+
+@Composable
+private fun LicenseEntry(
+    name: String,
+    author: String,
+    license: String,
+    url: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = "\u2022",
+            style = MaterialTheme.typography.bodySmall,
+            color = VortexCyan,
+            modifier = Modifier.padding(end = 6.dp, top = 1.dp)
+        )
+        Column {
+            Text(
+                text = "$name — $license",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "$author · $url",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

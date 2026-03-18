@@ -60,7 +60,7 @@ enum class Platform(
     PSP(
         displayName = "PlayStation Portable",
         abbreviation = "PSP",
-        romExtensions = listOf("iso", "cso", "pbp"),
+        romExtensions = listOf("iso", "cso", "pbp", "chd"),
         icon = "psp"
     ),
     DREAMCAST(

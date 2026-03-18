@@ -7,6 +7,7 @@ import android.os.Environment
 import android.provider.DocumentsContract
 import android.util.Log
 import com.vortex.emulator.core.*
+import com.vortex.emulator.gpu.ChipsetDetector
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,7 +22,8 @@ class EmulationEngine @Inject constructor(
     @ApplicationContext private val context: Context,
     private val coreDownloader: CoreDownloader,
     val frontend: FrontendBridge,
-    private val coreSettingsRepo: CoreSettingsRepository
+    private val coreSettingsRepo: CoreSettingsRepository,
+    private val chipsetDetector: ChipsetDetector
 ) {
     companion object {
         private const val TAG = "EmulationEngine"
@@ -72,14 +74,20 @@ class EmulationEngine @Inject constructor(
 
         Log.i(TAG, "Resolved ROM path: $romPath (${File(romPath).length()} bytes)")
 
-        // Set Vulkan display backend BEFORE loadCore if user selected Vulkan/Ashes
+        // Set Vulkan display backend BEFORE loadCore if user selected Vulkan/Ashes.
+        // Note: PPSSPP's libretro core uses GLES internally. Vulkan display uses a
+        // GL→Vulkan readback path that may cause issues on some GPUs. GL display is
+        // recommended for PPSSPP, but we respect the user's explicit choice.
         if (coreId != null) {
             val settings = coreSettingsRepo.load(coreId)
-            val nativeBackend = when (settings.renderBackend) {
-                RenderBackend.VULKAN, RenderBackend.ASHES -> 1  // DISPLAY_VULKAN
-                else -> 0  // DISPLAY_GL
+            val nativeBackend = when {
+                settings.renderBackend == RenderBackend.VULKAN || settings.renderBackend == RenderBackend.ASHES -> 1
+                else -> 0
             }
             frontend.setRenderBackend(nativeBackend)
+            if (libraryName == "ppsspp" && nativeBackend == 1) {
+                Log.w(TAG, "Vulkan display selected for PPSSPP — may cause rendering issues. GL recommended.")
+            }
             Log.i(TAG, "Display backend set to ${if (nativeBackend == 1) "Vulkan" else "GL"}")
         }
 
@@ -92,8 +100,15 @@ class EmulationEngine @Inject constructor(
             return@withContext "Failed to load emulation core (error $result)"
         }
 
-        // Set performance-friendly defaults for demanding cores before loading game
-        applyPerformanceDefaults(libraryName)
+        // Set performance-friendly defaults for demanding cores before loading game.
+        // Skip defaults if user has already customized settings for this core —
+        // applyCoreSettings will apply the user's choices instead.
+        val hasCustom = coreId != null && coreSettingsRepo.hasCustomSettings(coreId)
+        if (!hasCustom) {
+            applyPerformanceDefaults(libraryName, coreId)
+        } else {
+            Log.i(TAG, "Skipping performance defaults — user has custom settings for $coreId")
+        }
 
         // Apply user's per-core settings BEFORE loadGame — cores read options during init
         if (coreId != null) {
@@ -132,7 +147,7 @@ class EmulationEngine @Inject constructor(
     }
 
     /** Apply performance-friendly core option defaults for demanding platforms. */
-    private fun applyPerformanceDefaults(libraryName: String) {
+    private fun applyPerformanceDefaults(libraryName: String, coreId: String? = null) {
         when {
             libraryName.startsWith("mupen64plus") -> {
                 frontend.setCoreOption("mupen64plus-cpucore", "dynamic_recompiler")
@@ -153,26 +168,61 @@ class EmulationEngine @Inject constructor(
                 Log.i(TAG, "Applied N64 performance defaults (ThreadedRenderer=False, EnableFBEmulation=True)")
             }
             libraryName == "ppsspp" -> {
-                // Software rendering by default — the PPSSPP libretro core's
-                // HW context_reset crashes on Mali GPUs (GL_INVALID_VALUE → SIGABRT).
-                // Software mode works on all chipsets. Users can switch to GPU
-                // rendering in Advanced/Compatibility settings (at their own risk).
-                frontend.setCoreOption("ppsspp_software_rendering", "enabled")
-                // Use 1x native resolution for best compatibility
-                frontend.setCoreOption("ppsspp_internal_resolution", "480x272")
-                // Disable PPSSPP's internal frameskip to avoid audio-video desync
-                frontend.setCoreOption("ppsspp_frameskip", "0")
-                frontend.setCoreOption("ppsspp_auto_frameskip", "disabled")
-                // Use fast memory access for better performance
-                frontend.setCoreOption("ppsspp_fast_memory", "enabled")
-                // GPU hardware transform for proper rendering (used when GPU mode)
-                frontend.setCoreOption("ppsspp_gpu_hardware_transform", "enabled")
-                // Software skinning for better compatibility
-                frontend.setCoreOption("ppsspp_software_skinning", "enabled")
-                // Texture scaling off for performance
-                frontend.setCoreOption("ppsspp_texture_scaling_level", "1")
-                frontend.setCoreOption("ppsspp_texture_scaling_type", "xbrz")
-                Log.i(TAG, "Applied PSP performance defaults (software rendering)")
+                // Detect GPU vendor to apply optimal defaults.
+                // Mali GPUs crash with PPSSPP's HW context_reset (GL_INVALID_VALUE → SIGABRT),
+                // so software rendering is forced only on Mali. Adreno/PowerVR/other GPUs
+                // can safely use hardware rendering for much better performance.
+                val gpuRenderer = chipsetDetector.chipsetInfo.gpuInfo?.renderer?.lowercase() ?: ""
+                val isMaliGpu = gpuRenderer.contains("mali")
+
+                // Rocket PSP Engine profile: aggressive tuning for maximum performance
+                val isRocket = coreId?.contains("rocket") == true
+                if (isRocket) {
+                    if (isMaliGpu) {
+                        frontend.setCoreOption("ppsspp_software_rendering", "enabled")
+                        frontend.setCoreOption("ppsspp_internal_resolution", "480x272")
+                    } else {
+                        frontend.setCoreOption("ppsspp_software_rendering", "disabled")
+                        frontend.setCoreOption("ppsspp_internal_resolution", "2x")
+                    }
+                    frontend.setCoreOption("ppsspp_frameskip", "0")
+                    frontend.setCoreOption("ppsspp_auto_frameskip", "disabled")
+                    frontend.setCoreOption("ppsspp_fast_memory", "enabled")
+                    frontend.setCoreOption("ppsspp_gpu_hardware_transform", "enabled")
+                    frontend.setCoreOption("ppsspp_software_skinning", "enabled")
+                    frontend.setCoreOption("ppsspp_texture_scaling_level", "1")
+                    frontend.setCoreOption("ppsspp_texture_scaling_type", "xbrz")
+                    // Rocket-specific aggressive performance options
+                    frontend.setCoreOption("ppsspp_block_transfer_gpu", "enabled")
+                    frontend.setCoreOption("ppsspp_skip_gpu_readbacks", "enabled")
+                    frontend.setCoreOption("ppsspp_inflight_frames", "Up to 2")
+                    frontend.setCoreOption("ppsspp_io_timing_method", "Fast")
+                    frontend.setCoreOption("ppsspp_frame_duplication", "enabled")
+                    frontend.setCoreOption("ppsspp_lower_resolution_for_effects", "Off")
+                    Log.i(TAG, "Applied Rocket PSP Engine defaults (${if (isMaliGpu) "Mali/SW" else "HW/$gpuRenderer"})")
+                } else {
+                    if (isMaliGpu) {
+                        frontend.setCoreOption("ppsspp_software_rendering", "enabled")
+                        frontend.setCoreOption("ppsspp_internal_resolution", "480x272")
+                        Log.i(TAG, "Applied PSP performance defaults (software rendering — Mali GPU detected)")
+                    } else {
+                        frontend.setCoreOption("ppsspp_software_rendering", "disabled")
+                        frontend.setCoreOption("ppsspp_internal_resolution", "2x")
+                        Log.i(TAG, "Applied PSP performance defaults (hardware rendering — ${gpuRenderer})")
+                    }
+                    // Disable PPSSPP's internal frameskip to avoid audio-video desync
+                    frontend.setCoreOption("ppsspp_frameskip", "0")
+                    frontend.setCoreOption("ppsspp_auto_frameskip", "disabled")
+                    // Use fast memory access for better performance
+                    frontend.setCoreOption("ppsspp_fast_memory", "enabled")
+                    // GPU hardware transform for proper rendering (used when GPU mode)
+                    frontend.setCoreOption("ppsspp_gpu_hardware_transform", "enabled")
+                    // Software skinning for better compatibility
+                    frontend.setCoreOption("ppsspp_software_skinning", "enabled")
+                    // Texture scaling off for performance
+                    frontend.setCoreOption("ppsspp_texture_scaling_level", "1")
+                    frontend.setCoreOption("ppsspp_texture_scaling_type", "xbrz")
+                }
             }
             libraryName == "flycast" -> {
                 frontend.setCoreOption("flycast_internal_resolution", "640x480")
@@ -244,7 +294,9 @@ class EmulationEngine @Inject constructor(
                 Log.i(TAG, "Backend: OpenGL ES (native display)")
             }
             RenderBackend.VULKAN, RenderBackend.ASHES -> {
-                frontend.setRenderBackend(1) // Vulkan display layer
+                // Respect user's choice — even for PPSSPP which uses GLES internally.
+                // The Vulkan display path uses GL→Vulkan readback which may have issues.
+                frontend.setRenderBackend(1)
                 when {
                     libraryName == "ppsspp" ->
                         frontend.setCoreOption("ppsspp_software_rendering", "disabled")
@@ -516,6 +568,11 @@ class EmulationEngine @Inject constructor(
 
     /** Attach a SurfaceView's Surface for direct GPU rendering. */
     fun setSurface(surface: android.view.Surface?) {
+        if (surface == null) {
+            // Signal emulation thread to stop BEFORE destroying native resources.
+            // This prevents the emu thread from calling GL on a dead EGL context.
+            surfaceReady = false
+        }
         frontend.setSurface(surface)
         surfaceReady = surface != null
     }

@@ -198,6 +198,10 @@ class CoreSettingsRepository @Inject constructor(
     private fun prefsFor(coreId: String): SharedPreferences =
         context.getSharedPreferences("vortex_core_settings_$coreId", Context.MODE_PRIVATE)
 
+    /** Returns true if the user has ever saved custom settings for this core. */
+    fun hasCustomSettings(coreId: String): Boolean =
+        prefsFor(coreId).all.isNotEmpty()
+
     fun load(coreId: String): CoreSettingsData {
         val prefs = prefsFor(coreId)
         return CoreSettingsData(

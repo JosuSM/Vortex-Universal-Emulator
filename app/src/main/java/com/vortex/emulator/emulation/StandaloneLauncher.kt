@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.vortex.emulator.core.CoreInfo
@@ -88,6 +89,8 @@ class StandaloneLauncher @Inject constructor(
          */
         val PACKAGE_MAP: Map<String, List<String>> = mapOf(
             "ppsspp_standalone"      to listOf(PPSSPP_GOLD, PPSSPP_FREE),
+            "retroarch_psp_standalone" to listOf(RETROARCH_PLUS, RETROARCH),
+            "lemuroid_psp_standalone" to listOf(LEMUROID),
             "mupen64_standalone"     to listOf(MUPEN64PLUS_AE, M64PLUS_FZ_PRO, MUPEN64PLUS_AE_FREE),
             "dolphin_standalone"     to listOf(DOLPHIN_EMU, DOLPHIN_MMJR),
             "citra_standalone"       to listOf(LIME3DS, CITRA_EMU),
@@ -182,7 +185,12 @@ class StandaloneLauncher @Inject constructor(
 
     private fun isPackageInstalled(packageName: String): Boolean {
         return try {
-            context.packageManager.getPackageInfo(packageName, 0)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(packageName, 0)
+            }
             true
         } catch (_: PackageManager.NameNotFoundException) {
             false
@@ -280,6 +288,24 @@ class StandaloneLauncher @Inject constructor(
                 }
             }
 
+            // ── RetroArch: launch with ROM file ──
+            RETROARCH, RETROARCH_PLUS -> {
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(romUri, "application/octet-stream")
+                    setPackage(packageName)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            }
+
+            // ── Lemuroid: launch with ROM file ──
+            LEMUROID -> {
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(romUri, "application/octet-stream")
+                    setPackage(packageName)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            }
+
             // ── Fallback: generic ACTION_VIEW ──
             else -> {
                 Intent(Intent.ACTION_VIEW).apply {
@@ -296,20 +322,11 @@ class StandaloneLauncher @Inject constructor(
      * or direct file:// URI for external storage files.
      */
     private fun getFileUri(file: File): Uri {
-        val appFilesDir = context.filesDir.absolutePath
-        val appCacheDir = context.cacheDir.absolutePath
-
-        return if (file.absolutePath.startsWith(appFilesDir) ||
-                   file.absolutePath.startsWith(appCacheDir)) {
-            FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                file
-            )
-        } else {
-            // External storage — use direct file URI (works with most emulators)
-            Uri.fromFile(file)
-        }
+        return FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
     }
 
     private fun getEmulatorDisplayName(packageName: String): String = when (packageName) {

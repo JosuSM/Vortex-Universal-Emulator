@@ -64,8 +64,13 @@ fun VortexTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = VortexSurface.toArgb()
-            window.navigationBarColor = VortexSurface.toArgb()
+            // API 36+ enforces edge-to-edge; status/nav bar colors are ignored
+            if (Build.VERSION.SDK_INT < 36) {
+                @Suppress("DEPRECATION")
+                window.statusBarColor = VortexSurface.toArgb()
+                @Suppress("DEPRECATION")
+                window.navigationBarColor = VortexSurface.toArgb()
+            }
             WindowCompat.getInsetsController(window, view).apply {
                 isAppearanceLightStatusBars = false
                 isAppearanceLightNavigationBars = false

@@ -62,6 +62,7 @@ import com.vortex.emulator.core.defaultControllerLayout
 import com.vortex.emulator.ui.theme.*
 import com.vortex.emulator.ui.viewmodel.EmulationState
 import com.vortex.emulator.ui.viewmodel.EmulationViewModel
+import androidx.activity.compose.BackHandler
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.roundToInt
@@ -128,6 +129,13 @@ fun EmulationScreen(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         if (uri != null) viewModel.setCustomSaveDirectory(uri)
+    }
+
+    // ── Predictive back: confirm before exiting emulation ──
+    BackHandler(
+        enabled = emulationState == EmulationState.RUNNING || emulationState == EmulationState.PAUSED
+    ) {
+        onBack()
     }
 
     // ── Immersive mode: hide status bar + navigation bar ──

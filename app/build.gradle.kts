@@ -72,7 +72,7 @@ val releaseSigningConfig = if (
 
 android {
     namespace = "com.vortex.emulator"
-    compileSdk = 35
+    compileSdk = 36
 
     signingConfigs {
         if (releaseSigningConfig != null) {
@@ -88,7 +88,7 @@ android {
     defaultConfig {
         applicationId = "com.vortex.emulator"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 3
         versionName = "2.2-Nova"
 

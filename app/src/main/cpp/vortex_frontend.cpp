@@ -215,6 +215,7 @@ static GLuint                g_hw_blit_program = 0; // shader for HW frame blit
 static std::atomic<bool>     g_hw_context_reset_pending{false};
 static std::atomic<bool>     g_hw_frame_presented{false}; // set in video_refresh when swap done
 static std::atomic<bool>     g_hw_context_failed{false};  // set if context_reset threw
+static std::atomic<bool>     g_frame_was_software{false}; // true when HW core sends real pixel data
 
 // Audio state
 static std::mutex            g_audio_mutex;
@@ -251,6 +252,11 @@ static std::atomic<int>      g_display_backend{DISPLAY_GL};
 static VulkanRenderer        g_vulkan;
 static bool                  g_egl_offscreen = false; // true when EGL is PBuffer (Vulkan display + HW render)
 static std::vector<uint32_t> g_hw_readback_buf;       // HW frame readback for Vulkan display
+
+// Surface lifecycle mutex: prevents setSurface(null) from destroying EGL/Vulkan
+// while a frame is in progress. runFrame holds a shared lock; setSurface holds exclusive.
+static std::mutex            g_surface_mutex;
+static std::atomic<bool>     g_surface_active{false};  // quick check to skip runFrame early
 
 /* ── Shader sources ────────────────────────────────────────────── */
 static const char* VERT_SRC = R"(#version 300 es
@@ -591,40 +597,55 @@ static void core_video_refresh(const void* data, unsigned width, unsigned height
     }
 
     if (g_hw_render) {
-        // HW-rendered core: the core rendered into our texture-backed FBO.
-        if (width > 0 && height > 0) {
-            std::lock_guard<std::mutex> lock(g_video_mutex);
-            g_frame_w = width;
-            g_frame_h = height;
-        }
+        // Some cores (e.g. PPSSPP) request HW context via SET_HW_RENDER but
+        // may still use software rendering internally (ppsspp_software_rendering=enabled).
+        // When this happens, they send actual pixel data instead of
+        // RETRO_HW_FRAME_BUFFER_VALID. Detect this and route to the SW path.
+        bool is_real_pixel_data = data != nullptr &&
+            data != reinterpret_cast<const void*>(RETRO_HW_FRAME_BUFFER_VALID);
 
-        if (g_display_backend.load(std::memory_order_relaxed) == DISPLAY_VULKAN) {
-            // Vulkan display: readback from FBO → present via Vulkan
-            if (g_vulkan.isReady()) {
-                unsigned rw = g_hw_fbo_w;
-                unsigned rh = g_hw_fbo_h;
-                if (rw == 0 || rh == 0) { rw = g_frame_w; rh = g_frame_h; }
-                if (rw > 0 && rh > 0) {
-                    g_hw_readback_buf.resize(static_cast<size_t>(rw) * rh);
-                    glBindFramebuffer(GL_READ_FRAMEBUFFER, g_hw_fbo);
-                    glReadPixels(0, 0, static_cast<GLsizei>(rw), static_cast<GLsizei>(rh),
-                                 GL_RGBA, GL_UNSIGNED_BYTE, g_hw_readback_buf.data());
-                    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-                    g_vulkan.presentFrame(g_hw_readback_buf.data(), rw, rh,
-                                          false, g_hw_cb.bottom_left_origin);
+        if (is_real_pixel_data) {
+            if (vr_call_count <= 20)
+                LOGI("video_refresh: HW core sent real pixel data (SW fallback)");
+            g_frame_was_software.store(true, std::memory_order_release);
+            // Fall through to software frame processing below
+        } else {
+            // True HW frame: core rendered into our texture-backed FBO.
+            g_frame_was_software.store(false, std::memory_order_release);
+            if (width > 0 && height > 0) {
+                std::lock_guard<std::mutex> lock(g_video_mutex);
+                g_frame_w = width;
+                g_frame_h = height;
+            }
+
+            if (g_display_backend.load(std::memory_order_relaxed) == DISPLAY_VULKAN) {
+                // Vulkan display: readback from FBO → present via Vulkan
+                if (g_vulkan.isReady()) {
+                    unsigned rw = g_hw_fbo_w;
+                    unsigned rh = g_hw_fbo_h;
+                    if (rw == 0 || rh == 0) { rw = g_frame_w; rh = g_frame_h; }
+                    if (rw > 0 && rh > 0) {
+                        g_hw_readback_buf.resize(static_cast<size_t>(rw) * rh);
+                        glBindFramebuffer(GL_READ_FRAMEBUFFER, g_hw_fbo);
+                        glReadPixels(0, 0, static_cast<GLsizei>(rw), static_cast<GLsizei>(rh),
+                                     GL_RGBA, GL_UNSIGNED_BYTE, g_hw_readback_buf.data());
+                        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+                        g_vulkan.presentFrame(g_hw_readback_buf.data(), rw, rh,
+                                              false, g_hw_cb.bottom_left_origin);
+                        g_hw_frame_presented.store(true, std::memory_order_release);
+                    }
+                }
+            } else {
+                // GL display: blit FBO texture to window surface and swap
+                if (g_egl.valid() && g_egl.surface != EGL_NO_SURFACE) {
+                    blitHardwareFrame();
+                    g_egl.swapBuffers();
                     g_hw_frame_presented.store(true, std::memory_order_release);
                 }
             }
-        } else {
-            // GL display: blit FBO texture to window surface and swap
-            if (g_egl.valid() && g_egl.surface != EGL_NO_SURFACE) {
-                blitHardwareFrame();
-                g_egl.swapBuffers();
-                g_hw_frame_presented.store(true, std::memory_order_release);
-            }
+            g_frame_ready.store(true, std::memory_order_release);
+            return;
         }
-        g_frame_ready.store(true, std::memory_order_release);
-        return;
     }
 
     if (!data) return; // duped frame
@@ -1316,6 +1337,7 @@ static bool loadCoreSymbols() {
 
 /* ── Cleanup everything ────────────────────────────────────────── */
 static void cleanupAll() {
+    g_surface_active.store(false, std::memory_order_release);
     g_blit.destroy();
     if (g_hw_fbo)       { glDeleteFramebuffers(1, &g_hw_fbo); g_hw_fbo = 0; }
     if (g_hw_tex_color) { glDeleteTextures(1, &g_hw_tex_color); g_hw_tex_color = 0; }
@@ -1333,6 +1355,7 @@ static void cleanupAll() {
     g_hw_cb = {};
     g_hw_context_reset_pending.store(false);
     g_hw_context_failed.store(false);
+    g_frame_was_software.store(false);
     g_frame_buf.clear();
     g_frame_w = g_frame_h = 0;
     g_frame_ready.store(false);
@@ -1381,6 +1404,7 @@ Java_com_vortex_emulator_emulation_VortexNative_loadCore(
     g_hw_render = false;
     g_hw_cb = {};
     g_hw_context_failed.store(false);
+    g_frame_was_software.store(false);
     g_debug_frame_counter = 0;
 
     void* handle = dlopen(corePath, RTLD_LAZY);
@@ -1544,6 +1568,17 @@ Java_com_vortex_emulator_emulation_VortexNative_runFrame(
 {
     if (!g_core.run) return;
 
+    // Quick check: if surface was just destroyed, skip the whole frame
+    // to avoid using destroyed EGL/Vulkan resources.
+    if (!g_surface_active.load(std::memory_order_acquire)) return;
+
+    // Hold surface mutex for the entire frame to block setSurface(null)
+    // from destroying resources while we're using them.
+    std::lock_guard<std::mutex> surface_lock(g_surface_mutex);
+
+    // Double-check after acquiring lock
+    if (!g_surface_active.load(std::memory_order_acquire)) return;
+
     // Frame skip support
     int skip = g_frame_skip.load(std::memory_order_relaxed);
     if (skip > 0) {
@@ -1646,25 +1681,46 @@ Java_com_vortex_emulator_emulation_VortexNative_runFrame(
     }
 
     // After run: present frame
+    // Determine if this frame was actually rendered in software (even if g_hw_render is true).
+    // Cores like PPSSPP may request HW context but send real pixel data in SW mode.
+    bool frame_sw = g_frame_was_software.load(std::memory_order_acquire);
+    bool use_hw_path = g_hw_render && !frame_sw &&
+                       !g_hw_context_failed.load(std::memory_order_acquire);
+
     if (g_display_backend.load(std::memory_order_relaxed) == DISPLAY_VULKAN) {
         // Vulkan display path
-        if (g_hw_render) {
+        if (use_hw_path) {
             // Non-blocking HW cores where video_refresh didn't present
             if (!g_hw_frame_presented.load(std::memory_order_acquire) && g_vulkan.isReady()) {
                 unsigned rw = g_hw_fbo_w;
                 unsigned rh = g_hw_fbo_h;
                 if (rw > 0 && rh > 0) {
                     g_hw_readback_buf.resize(static_cast<size_t>(rw) * rh);
+
+                    // Try our FBO first
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, g_hw_fbo);
                     glReadPixels(0, 0, static_cast<GLsizei>(rw), static_cast<GLsizei>(rh),
                                  GL_RGBA, GL_UNSIGNED_BYTE, g_hw_readback_buf.data());
+
+                    // Check if our FBO was empty (core may have rendered to FBO 0)
+                    bool empty = true;
+                    for (size_t i = 0; i < std::min<size_t>(rw * rh, 64); i++) {
+                        if (g_hw_readback_buf[i] != 0) { empty = false; break; }
+                    }
+                    if (empty) {
+                        // Fallback: read from FBO 0 (where some cores render)
+                        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+                        glReadPixels(0, 0, static_cast<GLsizei>(rw), static_cast<GLsizei>(rh),
+                                     GL_RGBA, GL_UNSIGNED_BYTE, g_hw_readback_buf.data());
+                    }
+
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
                     g_vulkan.presentFrame(g_hw_readback_buf.data(), rw, rh,
                                           false, g_hw_cb.bottom_left_origin);
                 }
             }
         } else {
-            // SW render: present from g_frame_buf
+            // SW render (or HW core in SW mode, or HW context failed)
             if (g_frame_ready.load(std::memory_order_acquire) && g_vulkan.isReady()) {
                 std::lock_guard<std::mutex> lock(g_video_mutex);
                 if (!g_frame_buf.empty() && g_frame_w > 0 && g_frame_h > 0) {
@@ -1675,8 +1731,8 @@ Java_com_vortex_emulator_emulation_VortexNative_runFrame(
             }
         }
     } else if (g_egl.valid() && g_egl.surface != EGL_NO_SURFACE) {
-        // GL display path (original)
-        if (g_hw_render) {
+        // GL display path
+        if (use_hw_path) {
             if (!g_hw_frame_presented.load(std::memory_order_acquire)) {
                 blitHardwareFrame();
                 g_egl.swapBuffers();
@@ -1957,6 +2013,13 @@ JNIEXPORT void JNICALL
 Java_com_vortex_emulator_emulation_VortexNative_setSurface(
     JNIEnv* env, jobject /*thiz*/, jobject jSurface)
 {
+    // Signal emulation thread to stop using the surface immediately
+    g_surface_active.store(false, std::memory_order_release);
+
+    // Wait for any in-progress frame to finish before destroying resources.
+    // The emulation thread holds g_surface_mutex during runFrame.
+    std::lock_guard<std::mutex> surface_lock(g_surface_mutex);
+
     // Release previous window & resources
     if (g_window) {
         g_blit.destroy();
@@ -2036,6 +2099,9 @@ Java_com_vortex_emulator_emulation_VortexNative_setSurface(
         eglMakeCurrent(g_egl.display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         LOGI("EGL context released from UI thread");
     }
+
+    // Mark surface active so emulation thread can proceed
+    g_surface_active.store(true, std::memory_order_release);
 }
 
 JNIEXPORT void JNICALL
